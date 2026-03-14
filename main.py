@@ -17,12 +17,14 @@ def convert_audio_to_transcript_markdown(
     Uses the local `openai-whisper` package.
     Some audio formats require `ffmpeg` installed on your system.
     """
+    # 1) Validate inputs and normalize paths.
     audio_file = Path(audio_path).expanduser().resolve()
     if not audio_file.exists():
         raise FileNotFoundError(f"Audio file not found: {audio_file}")
     if not audio_file.is_file():
         raise ValueError(f"Not a file: {audio_file}")
 
+    # 2) Decide where the transcript Markdown should be written.
     out_path = (
         Path(output_markdown_path).expanduser().resolve()
         if output_markdown_path is not None
@@ -31,10 +33,12 @@ def convert_audio_to_transcript_markdown(
 
     import whisper  # type: ignore
 
+    # 3) Load the Whisper model and transcribe the audio.
     model = whisper.load_model(whisper_model)
     result = model.transcribe(str(audio_file))
     text = (result.get("text") or "").strip()
 
+    # 4) Write the transcript out as a Markdown document.
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(
         "\n".join(
@@ -69,18 +73,21 @@ def summarize_and_extract_core_info_from_markdown(
     - OPENAI_BASE_URL (optional, for OpenAI-compatible providers)
     - OPENAI_MODEL (optional default model)
     """
+    # 1) Validate inputs and normalize paths.
     md_path = Path(markdown_path).expanduser().resolve()
     if not md_path.exists():
         raise FileNotFoundError(f"Markdown file not found: {md_path}")
     if not md_path.is_file():
         raise ValueError(f"Not a file: {md_path}")
 
+    # 2) Decide where the output summary Markdown should be written.
     out_path = (
         Path(output_markdown_path).expanduser().resolve()
         if output_markdown_path is not None
         else md_path.with_suffix(".summary.md")
     )
 
+    # 3) Load runtime configuration for the LLM call.
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("Missing env var OPENAI_API_KEY")
@@ -88,6 +95,7 @@ def summarize_and_extract_core_info_from_markdown(
     base_url = os.getenv("OPENAI_BASE_URL")
     chosen_model = model or os.getenv("OPENAI_MODEL") or "gpt-4o-mini"
 
+    # 4) Read the source Markdown and build a prompt that asks for structured outputs.
     source = md_path.read_text(encoding="utf-8")
     system_prompt = (
         "You are an expert meeting analyst. Produce a concise, high-signal Markdown report. "
@@ -115,6 +123,7 @@ Source Markdown:
     # Prefer the Responses API when available; fall back to Chat Completions.
     text_out: str | None = None
     try:
+        # 5a) Make the LLM request via the Responses API (preferred).
         resp = client.responses.create(
             model=chosen_model,
             input=[
@@ -124,6 +133,7 @@ Source Markdown:
         )
         text_out = getattr(resp, "output_text", None)
     except Exception:
+        # 5b) Compatibility fallback: Chat Completions.
         comp = client.chat.completions.create(
             model=chosen_model,
             messages=[
@@ -133,6 +143,7 @@ Source Markdown:
         )
         text_out = comp.choices[0].message.content
 
+    # 6) Persist the result to disk.
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text((text_out or "").strip() + "\n", encoding="utf-8")
     return out_path
@@ -169,4 +180,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
