@@ -185,6 +185,9 @@ Source Markdown:
 
 
 def main() -> None:
+    from dotenv import load_dotenv
+    load_dotenv()  # Load environment variables from .env file
+
     parser = argparse.ArgumentParser(description="Whisper transcript + LLM summary pipeline")
     # From here on, the add_argument method takes command line args by --argument_name. The parse_args() method
     # converts them.
