@@ -184,7 +184,51 @@ Source Markdown:
     return out_path
 
 
+def _sync_env_from_template(env_path: Path, template_path: Path) -> None:
+    """Ensures .env exists and contains all keys defined in .env.template."""
+    import shutil
+    
+    if not template_path.exists():
+        return
+
+    if not env_path.exists():
+        print(f"No {env_path} file found. Creating one auto-magically from {template_path}...")
+        shutil.copy(template_path, env_path)
+        print(f"Please fill in your configuration in the newly created {env_path} file, then run again.")
+        sys.exit(1)
+
+    # If it exists, check for missing keys
+    with open(env_path, "r", encoding="utf-8") as f:
+        existing_env_lines = f.readlines()
+    
+    # Simple parsing: get all keys before '='
+    existing_keys = {
+        line.split("=", 1)[0].strip() 
+        for line in existing_env_lines 
+        if "=" in line and not line.strip().startswith("#")
+    }
+
+    with open(template_path, "r", encoding="utf-8") as f:
+        template_lines = f.readlines()
+
+    missing_lines = []
+    for line in template_lines:
+        if "=" in line and not line.strip().startswith("#"):
+            key = line.split("=", 1)[0].strip()
+            if key not in existing_keys:
+                missing_lines.append(line)
+
+    if missing_lines:
+        print(f"Found new variables in {template_path}. Appending them to {env_path}...")
+        with open(env_path, "a", encoding="utf-8") as f:
+            if existing_env_lines and not existing_env_lines[-1].endswith("\n"):
+                f.write("\n")
+            f.writelines(missing_lines)
+
+
 def main() -> None:
+    _sync_env_from_template(Path(".env"), Path(".env.template"))
+
     from dotenv import load_dotenv
     load_dotenv()  # Load environment variables from .env file
 
