@@ -2,7 +2,29 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
+import sys
 from pathlib import Path
+
+
+def _extract_audio_from_video(video_path: Path) -> Path:
+    """Extracts audio from a video file using ffmpeg."""
+    audio_path = video_path.with_suffix('.extracted.wav')
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-i", str(video_path), 
+                "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", 
+                str(audio_path)
+            ],
+            check=True,
+            capture_output=True
+        )
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Failed to extract audio from video: {e.stderr.decode('utf-8', errors='ignore')}") from e
+    except FileNotFoundError as e:
+        raise RuntimeError("ffmpeg is not installed or not found in PATH.") from e
+    return audio_path
 
 
 def convert_audio_to_transcript_markdown(
@@ -23,6 +45,19 @@ def convert_audio_to_transcript_markdown(
         raise FileNotFoundError(f"Audio file not found: {audio_file}")
     if not audio_file.is_file():
         raise ValueError(f"Not a file: {audio_file}")
+
+    valid_audio_exts = {".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac", ".wma"}
+    valid_video_exts = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
+    ext = audio_file.suffix.lower()
+
+    if ext not in valid_audio_exts and ext not in valid_video_exts:
+        raise ValueError(f"Unsupported file type: {ext}")
+
+    if ext in valid_video_exts:
+        try:
+            audio_file = _extract_audio_from_video(audio_file)
+        except RuntimeError as e:
+            raise RuntimeError(f"Audio extraction failed for video {audio_file}: {e}") from e
 
     # 2) Decide where the transcript Markdown should be written.
     out_path = (
@@ -151,6 +186,8 @@ Source Markdown:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Whisper transcript + LLM summary pipeline")
+    # From here on, the add_argument method takes command line args by --argument_name. The parse_args() method
+    # converts them.
     parser.add_argument("--audio", help="Path to audio file (if omitted, you will be prompted)")
     parser.add_argument(
         "--whisper-model",
@@ -163,12 +200,17 @@ def main() -> None:
     args = parser.parse_args()
 
     audio = args.audio or input("Enter path to an audio file: ").strip()
-    transcript_md = convert_audio_to_transcript_markdown(
-        audio,
-        whisper_model=args.whisper_model,
-        output_markdown_path=args.transcript_md,
-    )
-    print(f"Wrote transcript: {transcript_md}")
+    
+    try:
+        transcript_md = convert_audio_to_transcript_markdown(
+            audio,
+            whisper_model=args.whisper_model,
+            output_markdown_path=args.transcript_md,
+        )
+        print(f"Wrote transcript: {transcript_md}")
+    except (ValueError, FileNotFoundError, RuntimeError) as e:
+        print(f"Error processing audio file: {e}", file=sys.stderr)
+        sys.exit(1)
 
     summary_md = summarize_and_extract_core_info_from_markdown(
         transcript_md,
