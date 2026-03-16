@@ -69,8 +69,16 @@ def convert_audio_to_transcript_markdown(
     import whisper  # type: ignore
 
     # 3) Load the Whisper model and transcribe the audio.
-    model = whisper.load_model(whisper_model)
-    result = model.transcribe(str(audio_file))
+    try:
+        model = whisper.load_model(whisper_model)
+    except Exception as e:
+        raise RuntimeError(f"Failed to load Whisper model '{whisper_model}': {e}") from e
+
+    try:
+        result = model.transcribe(str(audio_file))
+    except Exception as e:
+        raise RuntimeError(f"Whisper transcription failed for {audio_file.name}: {e}") from e
+
     text = (result.get("text") or "").strip()
 
     # 4) Write the transcript out as a Markdown document.
@@ -153,7 +161,11 @@ Source Markdown:
 
     from openai import OpenAI  # type: ignore
 
-    client = OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
+    client = (
+        OpenAI(api_key=api_key, base_url=base_url, max_retries=3)
+        if base_url
+        else OpenAI(api_key=api_key, max_retries=3)
+    )
 
     # Prefer the Responses API when available; fall back to Chat Completions.
     text_out: str | None = None
@@ -167,8 +179,8 @@ Source Markdown:
             ],
         )
         text_out = getattr(resp, "output_text", None)
-    except Exception:
-        # 5b) Compatibility fallback: Chat Completions.
+    except (AttributeError, TypeError):
+        # 5b) Compatibility fallback: Responses API not available, use Chat Completions.
         comp = client.chat.completions.create(
             model=chosen_model,
             messages=[
@@ -259,12 +271,16 @@ def main() -> None:
         print(f"Error processing audio file: {e}", file=sys.stderr)
         sys.exit(1)
 
-    summary_md = summarize_and_extract_core_info_from_markdown(
-        transcript_md,
-        output_markdown_path=args.summary_md,
-        model=args.llm_model,
-    )
-    print(f"Wrote summary: {summary_md}")
+    try:
+        summary_md = summarize_and_extract_core_info_from_markdown(
+            transcript_md,
+            output_markdown_path=args.summary_md,
+            model=args.llm_model,
+        )
+        print(f"Wrote summary: {summary_md}")
+    except Exception as e:
+        print(f"Error generating summary: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
