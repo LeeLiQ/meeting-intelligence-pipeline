@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import argparse
 import os
+import ssl
 import subprocess
 import sys
 from pathlib import Path
+
+# Fix for macOS SSL certificate verification issues (common with Whisper model downloads)
+if sys.platform == "darwin":
+    ssl._create_default_https_context = ssl._create_unverified_context
+
 
 
 def _extract_audio_from_video(video_path: Path) -> Path:
