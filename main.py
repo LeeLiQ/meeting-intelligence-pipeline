@@ -136,15 +136,16 @@ def summarize_and_extract_core_info_from_markdown(
         else md_path.with_suffix(".summary.md")
     )
 
-    # 3) Load runtime configuration for the LLM call.
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise RuntimeError("Missing env var OPENAI_API_KEY")
+    # 3) Determine the requested model.
+    # Fallback order: 1. CLI arg (--llm-model), 2. GEMINI_MODEL, 3. OPENAI_MODEL, 4. Hardcoded default
+    chosen_model = (
+        model 
+        or os.getenv("GEMINI_MODEL") 
+        or os.getenv("OPENAI_MODEL") 
+        or "gemini-2.5-flash"
+    )
 
-    base_url = os.getenv("OPENAI_BASE_URL")
-    chosen_model = model or os.getenv("OPENAI_MODEL") or "gpt-4o-mini"
-
-    # 4) Read the source Markdown and build a prompt that asks for structured outputs.
+    # 4) Read the source Markdown and build the prompts.
     source = md_path.read_text(encoding="utf-8")
     system_prompt = (
         "You are an expert meeting analyst. Produce a concise, high-signal Markdown report. "
@@ -165,36 +166,17 @@ Source Markdown:
 ---
 """
 
-    from openai import OpenAI  # type: ignore
-
-    client = (
-        OpenAI(api_key=api_key, base_url=base_url, max_retries=3)
-        if base_url
-        else OpenAI(api_key=api_key, max_retries=3)
+    # 5) Resolve the concrete LLM Provider via the Factory and generate the summary.
+    # The factory will inspect 'chosen_model' and yield the correct strategy instance 
+    # (e.g. GeminiProvider if 'gemini-2.5-flash', or OpenAIProvider if 'gpt-4o').
+    from helper.llm import LLMFactory
+    
+    provider = LLMFactory.get_provider(chosen_model)
+    text_out = provider.summarize(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        model=chosen_model
     )
-
-    # Prefer the Responses API when available; fall back to Chat Completions.
-    text_out: str | None = None
-    try:
-        # 5a) Make the LLM request via the Responses API (preferred).
-        resp = client.responses.create(
-            model=chosen_model,
-            input=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-        text_out = getattr(resp, "output_text", None)
-    except (AttributeError, TypeError):
-        # 5b) Compatibility fallback: Responses API not available, use Chat Completions.
-        comp = client.chat.completions.create(
-            model=chosen_model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-        text_out = comp.choices[0].message.content
 
     # 6) Persist the result to disk.
     out_path.parent.mkdir(parents=True, exist_ok=True)
