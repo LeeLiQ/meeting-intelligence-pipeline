@@ -17,6 +17,17 @@ def _extract_audio_from_video(video_path: Path) -> Path:
     """Extracts audio from a video file using ffmpeg."""
     audio_path = video_path.with_suffix('.extracted.wav')
     try:
+        # Why run ffmpeg as a subprocess?
+        # Because it is a command-line tool that is not available in Python.
+        # We use subprocess.run to run the command.
+        # -y: overwrite output files without asking
+        # -i: input file
+        # -vn: no video
+        # -acodec pcm_s16le: audio codec
+        # -ar 16000: audio sample rate
+        # -ac 1: audio channels
+        # Why 16000 Hz? Whisper works best with 16000 Hz audio.
+    
         subprocess.run(
             [
                 "ffmpeg", "-y", "-i", str(video_path), 
@@ -33,68 +44,79 @@ def _extract_audio_from_video(video_path: Path) -> Path:
     return audio_path
 
 
-def convert_audio_to_transcript_markdown(
-    audio_path: str | os.PathLike[str],
+def prepare_transcript(
+    input_path: str | os.PathLike[str],
     *,
     whisper_model: str = "base",
     output_markdown_path: str | os.PathLike[str] | None = None,
 ) -> Path:
     """
-    Prompt-free helper: transcribe an audio file using Whisper and save as Markdown.
+    Prepare a transcript Markdown from an input file.
 
-    Uses the local `openai-whisper` package.
+    - If the input is already a Markdown file (.md), skip transcription
+      and return its path directly (passthrough).
+    - If the input is an audio or video file, transcribe it using Whisper
+      and save as Markdown.
+
     Some audio formats require `ffmpeg` installed on your system.
     """
     # 1) Validate inputs and normalize paths.
-    audio_file = Path(audio_path).expanduser().resolve()
-    if not audio_file.exists():
-        raise FileNotFoundError(f"Audio file not found: {audio_file}")
-    if not audio_file.is_file():
-        raise ValueError(f"Not a file: {audio_file}")
+    input_file = Path(input_path).expanduser().resolve()
+    if not input_file.exists():
+        raise FileNotFoundError(f"Input file not found: {input_file}")
+    if not input_file.is_file():
+        raise ValueError(f"Not a file: {input_file}")
 
+    ext = input_file.suffix.lower()
+
+    # 2) Markdown passthrough: if input is already a .md file, skip transcription.
+    if ext == ".md":
+        print(f"Input is already Markdown — skipping transcription: {input_file}")
+        return input_file
+
+    # 3) Validate audio/video file types.
     valid_audio_exts = {".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac", ".wma"}
     valid_video_exts = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
-    ext = audio_file.suffix.lower()
 
     if ext not in valid_audio_exts and ext not in valid_video_exts:
         raise ValueError(f"Unsupported file type: {ext}")
 
     if ext in valid_video_exts:
         try:
-            audio_file = _extract_audio_from_video(audio_file)
+            input_file = _extract_audio_from_video(input_file)
         except RuntimeError as e:
-            raise RuntimeError(f"Audio extraction failed for video {audio_file}: {e}") from e
+            raise RuntimeError(f"Audio extraction failed for video {input_file}: {e}") from e
 
-    # 2) Decide where the transcript Markdown should be written.
+    # 4) Decide where the transcript Markdown should be written.
     out_path = (
         Path(output_markdown_path).expanduser().resolve()
         if output_markdown_path is not None
-        else audio_file.with_suffix(".transcript.md")
+        else input_file.with_suffix(".transcript.md")
     )
 
     import whisper  # type: ignore
 
-    # 3) Load the Whisper model and transcribe the audio.
+    # 5) Load the Whisper model and transcribe the audio.
     try:
         model = whisper.load_model(whisper_model)
     except Exception as e:
         raise RuntimeError(f"Failed to load Whisper model '{whisper_model}': {e}") from e
 
     try:
-        result = model.transcribe(str(audio_file))
+        result = model.transcribe(str(input_file))
     except Exception as e:
-        raise RuntimeError(f"Whisper transcription failed for {audio_file.name}: {e}") from e
+        raise RuntimeError(f"Whisper transcription failed for {input_file.name}: {e}") from e
 
     text = (result.get("text") or "").strip()
 
-    # 4) Write the transcript out as a Markdown document.
+    # 6) Write the transcript out as a Markdown document.
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(
         "\n".join(
             [
                 "# Transcript",
                 "",
-                f"- Source: `{audio_file.name}`",
+                f"- Source: `{input_file.name}`",
                 f"- Whisper model: `{whisper_model}`",
                 "",
                 "## Text",
@@ -148,17 +170,43 @@ def summarize_and_extract_core_info_from_markdown(
     # 4) Read the source Markdown and build the prompts.
     source = md_path.read_text(encoding="utf-8")
     system_prompt = (
-        "You are an expert meeting analyst. Produce a concise, high-signal Markdown report. "
-        "If information is missing or uncertain, state assumptions and avoid fabricating details."
+        "You are a product analyst for a small online retail company. Your job is to "
+        "turn raw meeting transcripts into structured product documents that engineers "
+        "can act on. Focus on extracting functional requirements, user stories, and "
+        "actionable next steps. When the transcript references existing systems or "
+        "current processes, explicitly call them out — especially if a proposed change "
+        "might conflict with or depend on them. Be concise. Do not fabricate details; "
+        "if something is unclear, flag it as an open question."
     )
-    user_prompt = f"""Summarize and extract core information from the following Markdown.
+    user_prompt = f"""Analyze the following meeting transcript and produce a structured Markdown report with these sections, in this order:
 
-Return a Markdown document with these sections, in this order:
-1) Executive Summary (5-10 bullets)
-2) Key Decisions (bullets)
-3) Action Items (bullets; include owner if known, due date if known)
-4) Risks / Open Questions (bullets)
-5) Important Facts (bullets; numbers/dates/names)
+1) **Meeting Context**
+   - Meeting type (brainstorming / system design / ticketing / other)
+   - Attendees mentioned (if any)
+   - Date/time references (if any)
+
+2) **Executive Summary**
+   - 3-5 bullet points capturing the key outcomes of the meeting.
+
+3) **Functional Requirements**
+   - List each requirement as a user story:
+     "As a [role], I want [feature] so that [benefit]."
+   - Group related stories under an Epic name if a natural grouping exists.
+   - Tag each story with priority: [P0-Critical] [P1-High] [P2-Medium] [P3-Nice-to-have]
+
+4) **Existing System References & Potential Conflicts**
+   - List any existing systems, workflows, or processes mentioned.
+   - For each, note whether the proposed changes might conflict with, replace, or depend on them.
+   - If no existing systems are mentioned, state: "None identified — verify with the team before proceeding."
+
+5) **Decisions Made**
+   - Bullets for any decisions that were explicitly agreed upon.
+
+6) **Action Items**
+   - Owner (if mentioned), task description, due date (if mentioned).
+
+7) **Open Questions & Risks**
+   - Anything left unresolved, ambiguous, or flagged as risky.
 
 Source Markdown:
 ---
@@ -235,7 +283,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Whisper transcript + LLM summary pipeline")
     # From here on, the add_argument method takes command line args by --argument_name. The parse_args() method
     # converts them.
-    parser.add_argument("--audio", help="Path to audio file (if omitted, you will be prompted)")
+    parser.add_argument("--input", help="Path to input file: audio, video, or existing .md transcript")
     parser.add_argument(
         "--whisper-model",
         default=os.getenv("WHISPER_MODEL", "base"),
@@ -246,17 +294,17 @@ def main() -> None:
     parser.add_argument("--llm-model", help="LLM model name (else uses OPENAI_MODEL)")
     args = parser.parse_args()
 
-    audio = args.audio or input("Enter path to an audio file: ").strip()
+    input_file = args.input or input("Enter path to an input file (audio, video, or .md): ").strip()
     
     try:
-        transcript_md = convert_audio_to_transcript_markdown(
-            audio,
+        transcript_md = prepare_transcript(
+            input_file,
             whisper_model=args.whisper_model,
             output_markdown_path=args.transcript_md,
         )
-        print(f"Wrote transcript: {transcript_md}")
+        print(f"Transcript ready: {transcript_md}")
     except (ValueError, FileNotFoundError, RuntimeError) as e:
-        print(f"Error processing audio file: {e}", file=sys.stderr)
+        print(f"Error processing input file: {e}", file=sys.stderr)
         sys.exit(1)
 
     try:
