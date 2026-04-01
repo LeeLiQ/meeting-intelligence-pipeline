@@ -1,10 +1,12 @@
 # Project Status: Meeting Intelligence Pipeline
+
 **Date:** 2026-03-22
 **Current State:** Stable Core | Multi-Model Strategy | High Test Coverage
 
 ---
 
 ## 1. Core Features & Capabilities
+
 The pipeline has evolved from a simple transcription script into a robust multi-stage processing engine.
 
 | Feature | Description | Status |
@@ -18,6 +20,7 @@ The pipeline has evolved from a simple transcription script into a robust multi-
 ---
 
 ## 2. Architecture & Design Patterns
+
 The codebase follows modern Python best practices and is architected specifically for future growth into an Agent.
 
 - **Strategy Pattern (`helper/llm/`)**: All LLM logic is encapsulated in provider-specific classes (`OpenAIProvider`, `GeminiProvider`) satisfying a common `LLMProvider` Protocol.
@@ -28,6 +31,7 @@ The codebase follows modern Python best practices and is architected specificall
 ---
 
 ## 3. Reliability & Testing
+
 We have prioritized "Software Engineering" quality to ensure the pipeline is production-ready.
 
 - **Test Suite**: **43 unit tests** written in `pytest`, covering:
@@ -41,7 +45,9 @@ We have prioritized "Software Engineering" quality to ensure the pipeline is pro
 ---
 
 ## 4. Current Configuration options
+
 Configurable via `.env` or CLI:
+
 - **`--input`**: Path to audio, video, or markdown.
 - **`--llm-model`**: Override default model (e.g., `gemini-2.0-flash`, `gpt-4o-mini`).
 - **`--whisper-model`**: Choose Whisper size (`tiny`, `base`, `small`, etc.).
@@ -49,12 +55,15 @@ Configurable via `.env` or CLI:
 ---
 
 ## 5. Known Issues & Minor Quirks
+
 - **Python 3.13 Ghost Error**: An `Exception ignored: _DeleteDummyThreadOnDel` may appear during interpreter shutdown. This is a known 3.13 threading quirk and does **not** affect the output or validity of the run.
 
 ---
 
 ## 6. Next Steps (Agent Evolution)
+
 The "Stage 2" goal is to transition from this **Linear Pipeline** to a **Dynamic Agent**:
+
 1. **Tool Conversion**: Wrap current functions (`prepare_transcript`, `summarize`) as standalone tools.
 2. **Orchestration**: Implement an agent loop (using OpenAI Agents SDK or LangGraph) to handle multi-step goals (e.g., "Summarize this meeting and create these specific Jira tickets").
 3. **Memory**: Add state management to track long-running multi-meeting contexts.
