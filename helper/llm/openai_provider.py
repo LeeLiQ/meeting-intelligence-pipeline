@@ -1,8 +1,13 @@
 """OpenAI concrete strategy implementation."""
 
+from __future__ import annotations
+
 import os
+
 from openai import OpenAI
 from openai import AuthenticationError, RateLimitError, APIConnectionError
+
+from .base import LLMResult
 
 
 class OpenAIProvider:
@@ -14,9 +19,9 @@ class OpenAIProvider:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise RuntimeError("Missing env var OPENAI_API_KEY required for OpenAI models.")
-        
+
         base_url = os.getenv("OPENAI_BASE_URL")
-        
+
         # Max retries gives us automatic exponential backoff for 429s/500s.
         self.client = (
             OpenAI(api_key=api_key, base_url=base_url, max_retries=3)
@@ -24,7 +29,8 @@ class OpenAIProvider:
             else OpenAI(api_key=api_key, max_retries=3)
         )
 
-    def summarize(self, system_prompt: str, user_prompt: str, model: str) -> str:
+    def generate(self, system_prompt: str, user_prompt: str, model: str) -> LLMResult:
+        """Call the OpenAI API and return a rich LLMResult including token usage."""
         # Prefer the new Responses API when available.
         try:
             resp = self.client.responses.create(
@@ -34,8 +40,16 @@ class OpenAIProvider:
                     {"role": "user", "content": user_prompt},
                 ],
             )
-            return getattr(resp, "output_text", "")
-            
+            text = getattr(resp, "output_text", "") or ""
+            usage = getattr(resp, "usage", None)
+            return LLMResult(
+                text=text,
+                input_tokens=getattr(usage, "input_tokens", None) if usage else None,
+                output_tokens=getattr(usage, "output_tokens", None) if usage else None,
+                total_tokens=getattr(usage, "total_tokens", None) if usage else None,
+                raw_response=resp,
+            )
+
         except (AttributeError, TypeError):
             # Compatibility fallback: Chat Completions API
             try:
@@ -46,9 +60,16 @@ class OpenAIProvider:
                         {"role": "user", "content": user_prompt},
                     ],
                 )
-                return comp.choices[0].message.content or ""
+                text = comp.choices[0].message.content or ""
+                usage = comp.usage
+                return LLMResult(
+                    text=text,
+                    input_tokens=getattr(usage, "prompt_tokens", None) if usage else None,
+                    output_tokens=getattr(usage, "completion_tokens", None) if usage else None,
+                    total_tokens=getattr(usage, "total_tokens", None) if usage else None,
+                    raw_response=comp,
+                )
             except (AuthenticationError, RateLimitError, APIConnectionError) as e:
-                # Catch specific network/auth errors and re-raise with context
                 raise RuntimeError(f"OpenAI API failed: {e}") from e
             except Exception as e:
                 raise RuntimeError(f"Unexpected OpenAI error: {e}") from e

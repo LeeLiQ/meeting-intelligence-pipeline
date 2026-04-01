@@ -135,14 +135,17 @@ def summarize_and_extract_core_info_from_markdown(
     *,
     output_markdown_path: str | os.PathLike[str] | None = None,
     model: str | None = None,
+    log_dir: Path,
+    semantic_context: str | None = None,
 ) -> Path:
     """
-    Summarize + extract core info from a Markdown document using an OpenAI-compatible LLM.
+    Summarize + extract core info from a Markdown document using an LLM.
 
     Env vars:
-    - OPENAI_API_KEY (required)
-    - OPENAI_BASE_URL (optional, for OpenAI-compatible providers)
-    - OPENAI_MODEL (optional default model)
+    - OPENAI_API_KEY (required for OpenAI models)
+    - GEMINI_API_KEY (required for Gemini models)
+    - OPENAI_BASE_URL / GEMINI_BASE_URL (optional)
+    - GEMINI_MODEL / OPENAI_MODEL (optional default model)
     """
     # 1) Validate inputs and normalize paths.
     md_path = Path(markdown_path).expanduser().resolve()
@@ -169,15 +172,18 @@ def summarize_and_extract_core_info_from_markdown(
 
     # 4) Read the source Markdown and build the prompts.
     source = md_path.read_text(encoding="utf-8")
-    system_prompt = (
-        "You are a product analyst for a small online retail company. Your job is to "
-        "turn raw meeting transcripts into structured product documents that engineers "
-        "can act on. Focus on extracting functional requirements, user stories, and "
-        "actionable next steps. When the transcript references existing systems or "
-        "current processes, explicitly call them out — especially if a proposed change "
-        "might conflict with or depend on them. Be concise. Do not fabricate details; "
-        "if something is unclear, flag it as an open question."
+
+    from helper.prompt_loader import load_prompt
+    prompt_version, system_prompt = load_prompt("summary")
+
+    # Optionally inject the semantic payload as structured context for a richer summary.
+    semantic_section = (
+        f"\nPre-extracted semantic context (use this to enrich your analysis):\n"
+        f"```json\n{semantic_context}\n```\n"
+        if semantic_context
+        else ""
     )
+
     user_prompt = f"""Analyze the following meeting transcript and produce a structured Markdown report with these sections, in this order:
 
 1) **Meeting Context**
@@ -207,29 +213,83 @@ def summarize_and_extract_core_info_from_markdown(
 
 7) **Open Questions & Risks**
    - Anything left unresolved, ambiguous, or flagged as risky.
-
+{semantic_section}
 Source Markdown:
 ---
 {source}
 ---
 """
 
-    # 5) Resolve the concrete LLM Provider via the Factory and generate the summary.
-    # The factory will inspect 'chosen_model' and yield the correct strategy instance 
-    # (e.g. GeminiProvider if 'gemini-2.5-flash', or OpenAIProvider if 'gpt-4o').
+    # 5) Resolve the LLM provider via the Factory and generate the summary.
     from helper.llm import LLMFactory
-    
+    from helper.llm_logger import llm_call_context
+
     provider = LLMFactory.get_provider(chosen_model)
-    text_out = provider.summarize(
+
+    with llm_call_context(
+        prompt_version=prompt_version,
+        model=chosen_model,
         system_prompt=system_prompt,
         user_prompt=user_prompt,
-        model=chosen_model
-    )
+        log_dir=log_dir,
+    ) as ctx:
+        ctx.result = provider.generate(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            model=chosen_model,
+        )
+
+    text_out = ctx.result.text
 
     # 6) Persist the result to disk.
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text((text_out or "").strip() + "\n", encoding="utf-8")
     return out_path
+
+
+def _run_deep_analysis(
+    conflicts_reasons: list[str],
+    semantic_json: str,
+    model: str,
+    log_dir: Path,
+) -> str:
+    """
+    Extra LLM call triggered when conflict signals are detected and --deep-analysis is on.
+    Returns a Markdown string to be appended to the summary.
+    """
+    from helper.llm import LLMFactory
+    from helper.llm_logger import llm_call_context
+
+    system_prompt = (
+        "You are a senior product analyst specialising in conflict resolution and "
+        "technical risk assessment for software systems. Be specific, structured, and concise."
+    )
+    conflict_list = "\n".join(f"- {r}" for r in conflicts_reasons)
+    user_prompt = (
+        f"The following conflict signals were detected in a meeting:\n\n"
+        f"{conflict_list}\n\n"
+        f"Extracted semantic payload:\n```json\n{semantic_json}\n```\n\n"
+        "Produce a concise **Conflict & Risk Deep-Dive** Markdown section that:\n"
+        "1. Explains each conflict signal and why it matters.\n"
+        "2. Proposes a concrete mitigation or decision path for each.\n"
+        "3. Flags any dependencies that must be resolved before work can start."
+    )
+
+    provider = LLMFactory.get_provider(model)
+    with llm_call_context(
+        prompt_version="deep_analysis_v1",
+        model=model,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        log_dir=log_dir,
+    ) as ctx:
+        ctx.result = provider.generate(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            model=model,
+        )
+
+    return ctx.result.text
 
 
 def _sync_env_from_template(env_path: Path, template_path: Path) -> None:
@@ -278,11 +338,9 @@ def main() -> None:
     _sync_env_from_template(Path(".env"), Path(".env.template"))
 
     from dotenv import load_dotenv
-    load_dotenv()  # Load environment variables from .env file
+    load_dotenv()
 
     parser = argparse.ArgumentParser(description="Whisper transcript + LLM summary pipeline")
-    # From here on, the add_argument method takes command line args by --argument_name. The parse_args() method
-    # converts them.
     parser.add_argument("--input", help="Path to input file: audio, video, or existing .md transcript")
     parser.add_argument(
         "--whisper-model",
@@ -290,12 +348,31 @@ def main() -> None:
         help="Whisper model name (default: base). Example: tiny, base, small, medium, large",
     )
     parser.add_argument("--transcript-md", help="Output transcript markdown path")
+    parser.add_argument("--extracted-json", help="Output semantic extraction JSON path")
     parser.add_argument("--summary-md", help="Output summary markdown path")
-    parser.add_argument("--llm-model", help="LLM model name (else uses OPENAI_MODEL)")
+    parser.add_argument("--llm-model", help="LLM model name (else uses GEMINI_MODEL / OPENAI_MODEL env vars)")
+    parser.add_argument(
+        "--min-words",
+        type=int,
+        default=1_200,
+        help="Minimum meaningful word count for the transcript (default: 1200 ≈ 15-min meeting).",
+    )
+    parser.add_argument(
+        "--deep-analysis",
+        action="store_true",
+        help="Enable conflict-triggered deep analysis LLM call (extra API cost).",
+    )
+    parser.add_argument(
+        "--log-dir",
+        default="logs",
+        help="Directory for LLM observability JSONL logs (default: ./logs/).",
+    )
     args = parser.parse_args()
 
     input_file = args.input or input("Enter path to an input file (audio, video, or .md): ").strip()
-    
+    log_dir = Path(args.log_dir).expanduser().resolve()
+
+    # ── Stage 1: Transcription ──────────────────────────────────────────────
     try:
         transcript_md = prepare_transcript(
             input_file,
@@ -307,16 +384,84 @@ def main() -> None:
         print(f"Error processing input file: {e}", file=sys.stderr)
         sys.exit(1)
 
+    # ── Stage 2: Quality Gate ───────────────────────────────────────────────
+    from helper.pipeline_guards import QualityVerdict, check_transcript_quality
+
+    transcript_text = transcript_md.read_text(encoding="utf-8")
+    verdict = check_transcript_quality(transcript_text, min_words=args.min_words)
+
+    if verdict == QualityVerdict.SKIP:
+        print(
+            "Transcript is too short to process meaningfully. "
+            "Use --min-words to adjust the threshold.",
+            file=sys.stderr,
+        )
+        sys.exit(0)  # Not an error — expected edge case.
+
+    # ── Stage 3: Semantic Extraction ────────────────────────────────────────
+    chosen_model = (
+        args.llm_model
+        or os.getenv("GEMINI_MODEL")
+        or os.getenv("OPENAI_MODEL")
+        or "gemini-2.5-flash"
+    )
+
+    from helper.semantic_extractor import extract_semantic_payload
+
+    try:
+        extraction = extract_semantic_payload(
+            transcript_md,
+            model=chosen_model,
+            log_dir=log_dir,
+            output_json_path=Path(args.extracted_json) if args.extracted_json else None,
+        )
+        print(f"Semantic extraction: {extraction.json_path}")
+    except Exception as e:
+        print(f"Error during semantic extraction: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # ── Stage 4: Conflict Detection ─────────────────────────────────────────
+    from helper.pipeline_guards import detect_conflicts
+
+    conflicts = detect_conflicts(extraction.payload)
+
+    # ── Stage 5: Summary Generation ─────────────────────────────────────────
     try:
         summary_md = summarize_and_extract_core_info_from_markdown(
             transcript_md,
             output_markdown_path=args.summary_md,
             model=args.llm_model,
+            log_dir=log_dir,
+            semantic_context=extraction.json_path.read_text(encoding="utf-8"),
         )
         print(f"Wrote summary: {summary_md}")
     except Exception as e:
         print(f"Error generating summary: {e}", file=sys.stderr)
         sys.exit(1)
+
+    # ── Stage 6: Deep Analysis (optional) ───────────────────────────────────
+    if conflicts.has_conflicts and args.deep_analysis:
+        print(f"\n[DeepAnalysis] Running deep conflict analysis ({len(conflicts.reasons)} signals)...")
+        try:
+            deep_text = _run_deep_analysis(
+                conflicts_reasons=conflicts.reasons,
+                semantic_json=extraction.json_path.read_text(encoding="utf-8"),
+                model=chosen_model,
+                log_dir=log_dir,
+            )
+            # Append the deep analysis section to the existing summary file.
+            with summary_md.open("a", encoding="utf-8") as fh:
+                fh.write("\n\n---\n\n")
+                fh.write(deep_text.strip())
+                fh.write("\n")
+            print(f"Deep analysis appended to: {summary_md}")
+        except Exception as e:
+            print(f"Deep analysis failed (non-fatal): {e}", file=sys.stderr)
+    elif conflicts.has_conflicts and not args.deep_analysis:
+        print(
+            "\n[DeepAnalysis] Conflict signals detected but --deep-analysis is not set. "
+            "Re-run with --deep-analysis to get a detailed conflict breakdown."
+        )
 
 
 if __name__ == "__main__":
