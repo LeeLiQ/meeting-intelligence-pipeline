@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import time
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
@@ -36,6 +37,8 @@ from pathlib import Path
 from typing import Generator
 
 from .llm.base import LLMResult
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -77,10 +80,10 @@ def _print_summary(record: LLMCallRecord) -> None:
         else "n/a"
     )
     status_icon = "✓" if record.status == "success" else "✗"
-    print(
-        f"[LLM] {status_icon} model={record.model}  "
-        f"tokens={token_str}  latency={record.latency_seconds:.2f}s  "
-        f"version={record.prompt_version}"
+    _logger.info(
+        "[LLM] %s model=%s  tokens=%s  latency=%.2fs  version=%s",
+        status_icon, record.model, token_str,
+        record.latency_seconds, record.prompt_version,
     )
 
 

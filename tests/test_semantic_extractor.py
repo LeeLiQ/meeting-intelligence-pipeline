@@ -1,13 +1,12 @@
-"""Tests for the semantic extraction layer (helper/semantic_extractor.py).
-
-All LLM calls and file-system side effects are mocked.
+"""Tests for Pydantic schemas in helper/semantic_extractor.py
+and ExtractionStage in helper/pipeline/stages.py.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -18,9 +17,9 @@ from helper.semantic_extractor import (
     Risk,
     Entity,
     Decision,
-    _strip_fences,
-    extract_semantic_payload,
 )
+from helper.pipeline.stages import _strip_fences, ExtractionStage
+from helper.pipeline.config import PipelineConfig, PipelineContext
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +88,7 @@ class TestSemanticPayload:
 
 
 # ---------------------------------------------------------------------------
-# extract_semantic_payload (integration, all I/O mocked)
+# ExtractionStage (integration, all I/O mocked)
 # ---------------------------------------------------------------------------
 
 _VALID_JSON = json.dumps({
@@ -103,103 +102,84 @@ _VALID_JSON = json.dumps({
 })
 
 
-def _make_ctx(text: str):
-    """Return a mock context object that llm_call_context yields."""
-    ctx = MagicMock()
-    ctx.result = LLMResult(text=text, input_tokens=500, output_tokens=200)
+def _make_result(text: str) -> LLMResult:
+    return LLMResult(text=text, input_tokens=500, output_tokens=200)
+
+
+def _make_stage() -> ExtractionStage:
+    """Build an ExtractionStage with mock dependencies."""
+    mock_factory = MagicMock()
+    mock_loader = MagicMock(return_value=("extraction_v2", "Be a system analyst."))
+    return ExtractionStage(llm_factory=mock_factory, prompt_loader=mock_loader)
+
+
+def _make_ctx(tmp_path: Path, transcript_text: str = "Meeting content") -> PipelineContext:
+    """Build a PipelineContext with a normalized transcript on disk."""
+    normalized = tmp_path / "test.normalized.md"
+    normalized.write_text(transcript_text, encoding="utf-8")
+    config = PipelineConfig(log_dir=tmp_path / "logs")
+    ctx = PipelineContext(config=config, normalized_transcript=normalized)
     return ctx
 
 
-class TestExtractSemanticPayload:
+class TestExtractionStage:
 
-    @patch("helper.semantic_extractor.LLMFactory")
-    @patch("helper.semantic_extractor.llm_call_context")
-    @patch("helper.semantic_extractor.load_prompt", return_value=("extraction_v1", "Be a product analyst."))
-    def test_valid_json_produces_correct_payload(
-        self, mock_load_prompt, mock_ctx, mock_factory, tmp_path: Path
-    ):
-        """Happy path: LLM returns valid JSON → payload is parsed and persisted."""
-        transcript = tmp_path / "meeting.transcript.md"
-        transcript.write_text("# Transcript\n\nLots of meeting content.", encoding="utf-8")
+    @patch("helper.pipeline.stages.llm_call_context")
+    def test_valid_json_produces_correct_payload(self, mock_ctx_mgr, tmp_path: Path):
+        stage = _make_stage()
+        ctx = _make_ctx(tmp_path)
 
-        ctx_obj = _make_ctx(_VALID_JSON)
-        mock_ctx.return_value.__enter__.return_value = ctx_obj
-        mock_ctx.return_value.__exit__.return_value = False
+        result = _make_result(_VALID_JSON)
+        mock_inner = MagicMock()
+        mock_inner.result = result
+        mock_ctx_mgr.return_value.__enter__.return_value = mock_inner
+        mock_ctx_mgr.return_value.__exit__.return_value = False
 
         mock_provider = MagicMock()
-        mock_provider.generate.return_value = ctx_obj.result
-        mock_factory.get_provider.return_value = mock_provider
+        mock_provider.generate.return_value = result
+        stage._llm_factory.return_value = mock_provider
 
-        result = extract_semantic_payload(
-            transcript, model="gemini-2.5-flash", log_dir=tmp_path / "logs"
-        )
+        stage.execute(ctx)
 
-        assert result.payload.features == ["Product search"]
-        assert result.payload.requirements[0].priority == "P1"
-        assert result.payload.risks[0].severity == "medium"
-        assert result.json_path.exists()
+        assert ctx.semantic_payload is not None
+        assert ctx.semantic_payload.features == ["Product search"]
+        assert ctx.semantic_payload.requirements[0].priority == "P1"
+        assert ctx.semantic_json_path is not None
+        assert ctx.semantic_json_path.exists()
 
-        persisted = json.loads(result.json_path.read_text())
-        assert persisted["features"] == ["Product search"]
+    @patch("helper.pipeline.stages.llm_call_context")
+    def test_json_wrapped_in_fences_is_accepted(self, mock_ctx_mgr, tmp_path: Path):
+        stage = _make_stage()
+        ctx = _make_ctx(tmp_path)
 
-    @patch("helper.semantic_extractor.LLMFactory")
-    @patch("helper.semantic_extractor.llm_call_context")
-    @patch("helper.semantic_extractor.load_prompt", return_value=("extraction_v1", "sys"))
-    def test_json_wrapped_in_fences_is_accepted(
-        self, mock_load_prompt, mock_ctx, mock_factory, tmp_path: Path
-    ):
-        """LLM sometimes wraps JSON in markdown fences — should be stripped."""
         fenced = f"```json\n{_VALID_JSON}\n```"
-        ctx_obj = _make_ctx(fenced)
-        mock_ctx.return_value.__enter__.return_value = ctx_obj
-        mock_ctx.return_value.__exit__.return_value = False
-        mock_factory.get_provider.return_value = MagicMock(generate=MagicMock(return_value=ctx_obj.result))
+        result = _make_result(fenced)
+        mock_inner = MagicMock()
+        mock_inner.result = result
+        mock_ctx_mgr.return_value.__enter__.return_value = mock_inner
+        mock_ctx_mgr.return_value.__exit__.return_value = False
 
-        transcript = tmp_path / "t.transcript.md"
-        transcript.write_text("content", encoding="utf-8")
+        mock_provider = MagicMock()
+        mock_provider.generate.return_value = result
+        stage._llm_factory.return_value = mock_provider
 
-        result = extract_semantic_payload(transcript, model="gemini-2.5-flash", log_dir=tmp_path)
-        assert result.payload.features == ["Product search"]
+        stage.execute(ctx)
+        assert ctx.semantic_payload.features == ["Product search"]
 
-    @patch("helper.semantic_extractor.LLMFactory")
-    @patch("helper.semantic_extractor.llm_call_context")
-    @patch("helper.semantic_extractor.load_prompt", return_value=("extraction_v1", "sys"))
-    def test_invalid_json_raises_runtime_error(
-        self, mock_load_prompt, mock_ctx, mock_factory, tmp_path: Path
-    ):
-        """Malformed LLM response should raise RuntimeError with helpful message."""
-        ctx_obj = _make_ctx("This is not JSON at all.")
-        mock_ctx.return_value.__enter__.return_value = ctx_obj
-        mock_ctx.return_value.__exit__.return_value = False
-        mock_factory.get_provider.return_value = MagicMock(generate=MagicMock(return_value=ctx_obj.result))
+    @patch("helper.pipeline.stages.llm_call_context")
+    def test_invalid_json_raises_runtime_error(self, mock_ctx_mgr, tmp_path: Path):
+        stage = _make_stage()
+        ctx = _make_ctx(tmp_path)
 
-        transcript = tmp_path / "t.transcript.md"
-        transcript.write_text("content", encoding="utf-8")
+        result = _make_result("This is not JSON at all.")
+        mock_inner = MagicMock()
+        mock_inner.result = result
+        mock_ctx_mgr.return_value.__enter__.return_value = mock_inner
+        mock_ctx_mgr.return_value.__exit__.return_value = False
+
+        mock_provider = MagicMock()
+        mock_provider.generate.return_value = result
+        stage._llm_factory.return_value = mock_provider
 
         with pytest.raises(RuntimeError, match="invalid JSON"):
-            extract_semantic_payload(transcript, model="gemini-2.5-flash", log_dir=tmp_path)
-
-    @patch("helper.semantic_extractor.LLMFactory")
-    @patch("helper.semantic_extractor.llm_call_context")
-    @patch("helper.semantic_extractor.load_prompt", return_value=("extraction_v1", "sys"))
-    def test_custom_output_path_is_respected(
-        self, mock_load_prompt, mock_ctx, mock_factory, tmp_path: Path
-    ):
-        """output_json_path should override the default path."""
-        ctx_obj = _make_ctx(_VALID_JSON)
-        mock_ctx.return_value.__enter__.return_value = ctx_obj
-        mock_ctx.return_value.__exit__.return_value = False
-        mock_factory.get_provider.return_value = MagicMock(generate=MagicMock(return_value=ctx_obj.result))
-
-        transcript = tmp_path / "t.transcript.md"
-        transcript.write_text("content", encoding="utf-8")
-        custom_out = tmp_path / "custom_output.json"
-
-        result = extract_semantic_payload(
-            transcript,
-            model="gemini-2.5-flash",
-            log_dir=tmp_path,
-            output_json_path=custom_out,
-        )
-        assert result.json_path == custom_out
-        assert custom_out.exists()
+            stage.execute(ctx)

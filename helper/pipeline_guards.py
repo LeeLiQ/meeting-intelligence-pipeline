@@ -17,8 +17,11 @@ Two independent checks:
 from __future__ import annotations
 
 import enum
+import logging
 import re
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 from helper.semantic_extractor import SemanticPayload
 
@@ -65,20 +68,20 @@ def check_transcript_quality(
     word_count = _count_meaningful_words(transcript_text)
 
     if word_count < min_words:
-        print(
-            f"[QualityGate] SKIP — transcript has {word_count} meaningful words "
-            f"(minimum: {min_words}). Skipping LLM processing."
+        logger.info(
+            "[QualityGate] SKIP — transcript has %d meaningful words (minimum: %d).",
+            word_count, min_words,
         )
         return QualityVerdict.SKIP
 
     if word_count < min_words * 2:
-        print(
-            f"[QualityGate] WARN — transcript has {word_count} meaningful words "
-            f"(confident threshold: {min_words * 2}). Proceeding with low-confidence flag."
+        logger.warning(
+            "[QualityGate] WARN — transcript has %d meaningful words (confident threshold: %d).",
+            word_count, min_words * 2,
         )
         return QualityVerdict.WARN
 
-    print(f"[QualityGate] PASS — {word_count} meaningful words.")
+    logger.info("[QualityGate] PASS — %d meaningful words.", word_count)
     return QualityVerdict.PASS
 
 
@@ -135,11 +138,11 @@ def detect_conflicts(payload: SemanticPayload) -> ConflictReport:
 
     has_conflicts = bool(reasons)
     if has_conflicts:
-        print(
-            f"[ConflictDetector] {len(reasons)} conflict signal(s) found — "
-            "consider running with --deep-analysis."
+        logger.warning(
+            "[ConflictDetector] %d conflict signal(s) found.",
+            len(reasons),
         )
     else:
-        print("[ConflictDetector] No conflicts detected.")
+        logger.info("[ConflictDetector] No conflicts detected.")
 
     return ConflictReport(has_conflicts=has_conflicts, reasons=reasons)
