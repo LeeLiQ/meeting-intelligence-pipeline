@@ -52,3 +52,6 @@
 - 产出 `outputs/project-brief-2026-09-07.md`：整个 repo 的思路/现状/推理链/待决项，供与"转型路径" project 对照。待决 A–D 未决。
 - 收到转型 project 回函 `_notes/reply-brief-2026-09-07.md`：portfolio 为主、coach 为副；A 素材断点不成立（录音存在且已授权，待放入 coach/sessions/）；B 目录重整同意；C 砍 B2 直取 B3；PLAN v4 由转型 project 写入。
 - 阻塞发现：git 工作区 54 项未提交（最后 commit f2ece91 早于 v3 重启），CLAUDE.md/PLAN/BACKLOG/coach/coachagent 全是 untracked，helper/ 亦有未提交修改。sandbox 无法写 .git（index.lock 权限）。目录重整前必须先由 Qian 本机 commit 快照。
+- Qian 已 commit v3 快照 5811700。目录重整完成：helper/ main.py tests/ prompts/ samples/ → _archive/pipeline-v1/；Whisper 重写为 coachagent/transcribe.py（未对真实录音跑过）；BACKLOG：B1 打勾、B2 取消、B3 置顶并加 SDK 注意；CLAUDE.md 两处路径更新。
+- 待 Qian 本机执行：`git tag pipeline-v1-final 5811700`，然后 `git add -A && git commit -m "archive pipeline-v1; add coachagent.transcribe; cancel B2"`。sandbox 无法删 __pycache__/pytest-cache 残留（gitignored，可手删）。
+- 待 Qian：录音放入 coach/sessions/<date>-<slug>/；找一段公共会议录音作 demo 素材。PLAN v4 由转型 project 写入，本侧未动 PLAN.md。

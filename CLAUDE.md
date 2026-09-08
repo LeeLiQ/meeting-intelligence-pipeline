@@ -34,8 +34,9 @@
 
 ## Build 规则
 
-- 旧 pipeline（`helper/`、`main.py`、`tests/`、`prompts/`）**冻结为只读参考库**——
-  Whisper 接入、provider 接口、Pydantic schema、JSONL logging 值得回头抄思路，但不改不删，测试保持通过。
+- 旧 pipeline 已整体归档到 `_archive/pipeline-v1/`（2026-09-07，tag `pipeline-v1-final`），**只读**——
+  provider 接口、Pydantic schema、JSONL logging 值得回头抄思路，但绝不 import、不改、不在 root 运行它。
+  Whisper 已抄成 `coachagent/transcribe.py`。
 - 新代码全部从零写在 `coachagent/`，新依赖用 `uv` 加并说明理由，优先本地/零成本方案。
 - Backlog 条目的验收尽量包含可运行产出；核心能力（B4 起）补最小测试。
 
@@ -48,4 +49,5 @@
 ## 导航
 
 `PLAN.md`（v3 设计）· `BACKLOG.md`（Line B 任务）· `coach/`（模板、error-log、本地 sessions）
-· `coachagent/`（新代码，B1 时创建）· `_archive/`（v2 学习体系与早期总结）· `_notes/WORKLOG.md`（工作日志）
+· `coachagent/`（新代码）· `_archive/pipeline-v1/`（旧 pipeline）· `_archive/learning-v2/`（旧学习体系）
+· `_notes/WORKLOG.md`（工作日志）· `_notes/reply-brief-*.md`（与转型 project 的 handoff，PLAN v4 依据）

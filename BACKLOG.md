@@ -3,7 +3,10 @@
 > 规则：每项 ≤30 min、独立可完成、有验收。有精力就取一个：对 Claude 说 **"取 B\<N\>"**。
 > 做完打勾并在条目下写一行收获。Claude 负责补充新条目，保持待取项 ≥3 个。
 
-- [ ] **B1 — 从零搭包**：在 repo root 直接建 `coachagent/` 包（**不跑 `uv init`**——root 已是 uv project），
+> **2026-09-07 重排**（依转型 project 回函）：旧 pipeline 已归档到 `_archive/pipeline-v1/`；Whisper 已抄成
+> `coachagent/transcribe.py`，B2 因此取消；**下一条直取 B3**。节奏 checkpoint（非日程）：约每周 1 条，10 月底到 B6。
+
+- [x] **B1 — 从零搭包**：在 repo root 直接建 `coachagent/` 包（**不跑 `uv init`**——root 已是 uv project），
   写一个能跑的 hello-LLM 脚本（从 `.env` 读 key）。
   - 目的：现代 Python 工程起步（uv、pyproject、包布局）。
   - 验收：`uv run python -m coachagent.hello` 打印一条模型回复。
@@ -12,17 +15,16 @@
     pyproject 改成 `[tool.uv.workspace]` 并生成第二个 pyproject —— 两者都不要。pydantic 与
     python-dotenv root pyproject 里已有，B1 无需 `uv add`。
 
-- [ ] **B2 — transcribe CLI（改：复用不重写）**：`coachagent transcribe <audio>` 直接 **import** 旧 pipeline 的
-  Whisper stage，不重新包 Whisper。（2026-09-07 决定：旧 stage 与新写会完全重复，Line B 的不可替代部分从 B3 开始。）
-  - 目的：跨包 import 与 uv 的包解析；顺带确认旧代码在当前依赖版本下还能跑（昨天 B1 已撞过一次 OpenAI SDK 升级，
-    这类"不跑不知道"的漂移正是复用旧代码的价值）。
-  - 验收：对一段真实 recording 产出 transcript（落在 `coach/sessions/`，不进 git）；`coachagent` 里不出现第二份 Whisper 调用代码。
-  - 参考：`helper/pipeline/stages.py` 的 Whisper stage；注意 `helper/` 只读，不为了 import 方便去改它。
+- [x] ~~**B2 — transcribe CLI**~~ 取消（2026-09-07）：Whisper 无 agent 学习价值，直接由 Claude 从 v1 抄成
+  `coachagent/transcribe.py`。用法：`uv run python -m coachagent.transcribe <audio> [-o out.md] [--model base]`。
+  首次对真实录音跑通时顺手验证，不单独占一条。
 
 - [ ] **B3 — 第一次 tool call**：定义 `extract_meeting_notes` 的 tool schema，让模型返回 tool-call 请求，打印其 args。
   - 目的：tool/function calling 解剖——只到"模型提议调用"，不执行。
   - 验收：能用自己的话说清 tool schema 的三要素，以及模型*何时决定*调用。
-  - 概念：tool calling vs structured output（v2 的 confusion pair #1/#3）。
+  - 概念：tool calling vs structured output（v2 的 confusion pair #1/#3）。对照物：
+    `_archive/pipeline-v1/helper/pipeline/stages.py:407` 的 `response_format=` 就是 structured output——B3 做的是另一件事。
+  - SDK 注意：用 `client.responses.create(..., tools=[...])`，不用 `chat.completions`（B1 已撞过废弃）。
 
 - [ ] **B4 — 最小 agent loop**：执行 tool → 结果喂回 → final answer 或 `max_steps` 停。
   - 目的：agent loop + **stop conditions**（v2 记录的头号薄弱点）。
