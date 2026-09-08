@@ -173,6 +173,7 @@ def _build_pipeline():
         NormalizationStage,
         ExtractionStage,
         ConflictCheckStage,
+        RequirementWorksheetStage,
         InterpretationStage,
         ArchitectureStage,
     )
@@ -186,6 +187,7 @@ def _build_pipeline():
         NormalizationStage(llm_factory, prompt_loader),
         ExtractionStage(llm_factory, prompt_loader),
         ConflictCheckStage(),
+        RequirementWorksheetStage(llm_factory, prompt_loader),
         InterpretationStage(llm_factory, prompt_loader),
         ArchitectureStage(llm_factory, prompt_loader),
     ]
@@ -258,6 +260,8 @@ def main() -> None:
             log.info("  Normalized: %s", result.normalized_transcript)
         if result.semantic_json_path:
             log.info("  Semantic JSON: %s", result.semantic_json_path)
+        if result.worksheet_path:
+            log.info("  Worksheet: %s", result.worksheet_path)
         if result.prd_path:
             log.info("  PRD: %s", result.prd_path)
         if result.architecture_path:

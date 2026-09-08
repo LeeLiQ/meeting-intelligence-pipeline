@@ -6,6 +6,7 @@ import os
 
 from openai import OpenAI
 from openai import AuthenticationError, RateLimitError, APIConnectionError
+from pydantic import BaseModel
 
 from .base import LLMResult
 
@@ -29,8 +30,44 @@ class OpenAIProvider:
             else OpenAI(api_key=api_key, max_retries=3)
         )
 
-    def generate(self, system_prompt: str, user_prompt: str, model: str) -> LLMResult:
+    def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        model: str,
+        *,
+        response_format: type[BaseModel] | None = None,
+    ) -> LLMResult:
         """Call the OpenAI API and return a rich LLMResult including token usage."""
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        # Structured-output path: let the SDK parse the response into the schema,
+        # then serialise it back to a JSON string for a uniform LLMResult.text.
+        if response_format is not None:
+            try:
+                resp = self.client.responses.parse(
+                    model=model,
+                    input=messages,
+                    text_format=response_format,
+                )
+                parsed = getattr(resp, "output_parsed", None)
+                text = parsed.model_dump_json() if parsed is not None else (getattr(resp, "output_text", "") or "")
+                usage = getattr(resp, "usage", None)
+                return LLMResult(
+                    text=text,
+                    input_tokens=getattr(usage, "input_tokens", None) if usage else None,
+                    output_tokens=getattr(usage, "output_tokens", None) if usage else None,
+                    total_tokens=getattr(usage, "total_tokens", None) if usage else None,
+                    raw_response=resp,
+                )
+            except (AuthenticationError, RateLimitError, APIConnectionError) as e:
+                raise RuntimeError(f"OpenAI API failed: {e}") from e
+            except Exception as e:
+                raise RuntimeError(f"OpenAI structured-output call failed: {e}") from e
+
         # Prefer the new Responses API when available.
         try:
             resp = self.client.responses.create(

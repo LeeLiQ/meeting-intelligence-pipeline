@@ -6,6 +6,7 @@ import os
 
 import google.generativeai as genai
 from google.api_core.exceptions import GoogleAPIError
+from pydantic import BaseModel
 
 from .base import LLMResult
 
@@ -28,17 +29,32 @@ class GeminiProvider:
         else:
             genai.configure(api_key=api_key)
 
-    def generate(self, system_prompt: str, user_prompt: str, model: str) -> LLMResult:
+    def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        model: str,
+        *,
+        response_format: type[BaseModel] | None = None,
+    ) -> LLMResult:
         """
         Call the Gemini API and return a rich LLMResult including token usage.
 
         Gemini handles system instructions differently — we pass system_instruction
-        when initialising the GenerativeModel, not as a message.
+        when initialising the GenerativeModel, not as a message. When response_format
+        is given, we switch on JSON mode and hand Gemini the Pydantic schema directly.
         """
         try:
+            generation_config = None
+            if response_format is not None:
+                generation_config = {
+                    "response_mime_type": "application/json",
+                    "response_schema": response_format,
+                }
             gemini_model = genai.GenerativeModel(
                 model_name=model,
                 system_instruction=system_prompt,
+                generation_config=generation_config,
             )
             response = gemini_model.generate_content(user_prompt)
 

@@ -1,0 +1,275 @@
+{
+  "title": "Reorder reminders for repeat customers",
+  "business_intent": {
+    "problem": [
+      {
+        "text": "Many first-time buyers never place a second order; post-first-purchase retention is weak",
+        "evidence": "stated",
+        "quote": "most first-time buyers never come back for a second order"
+      },
+      {
+        "text": "Customers who loved a wine forget to come back and reorder it",
+        "evidence": "stated",
+        "quote": "just forgot to come back"
+      }
+    ],
+    "why_now": [
+      {
+        "text": "Retention is a current team priority",
+        "evidence": "stated",
+        "quote": "The reason I pulled this group together is retention"
+      },
+      {
+        "text": "Lifecycle recently quantified the drop-off, creating urgency",
+        "evidence": "inferred",
+        "quote": null
+      }
+    ],
+    "success_looks_like": [
+      {
+        "text": "Convert one-time buyers into repeat buyers (more second orders)",
+        "evidence": "inferred",
+        "quote": null
+      }
+    ],
+    "cost_of_inaction": []
+  },
+  "translation": {
+    "problem_statement": "Nudge customers who bought an everyday wine they liked to reorder it before they run out, converting one-time buyers into repeat buyers — without over-emailing them.",
+    "requirements": [
+      {
+        "text": "Send an email reminder ~30 days after purchase to reorder favorites",
+        "kind": "solution_in_disguise",
+        "underlying_need": "A timely nudge to reorder a wine the customer is likely running low on",
+        "evidence": "stated"
+      },
+      {
+        "text": "Let customers set up an auto-shipped subscription for a wine",
+        "kind": "solution_in_disguise",
+        "underlying_need": "Make recurring repurchase effortless",
+        "evidence": "stated"
+      },
+      {
+        "text": "Personalize reminder timing from each customer's purchase history",
+        "kind": "requirement",
+        "underlying_need": null,
+        "evidence": "stated"
+      },
+      {
+        "text": "Only nudge on repeat-friendly 'everyday' wines, excluding occasion/gift buys",
+        "kind": "requirement",
+        "underlying_need": null,
+        "evidence": "stated"
+      },
+      {
+        "text": "Protect customers from email over-frequency relative to existing campaigns",
+        "kind": "requirement",
+        "underlying_need": null,
+        "evidence": "stated"
+      }
+    ],
+    "assumptions": [
+      {
+        "text": "The 30-day reorder window is a guess, not validated",
+        "evidence": "stated",
+        "quote": "That number feels made up"
+      },
+      {
+        "text": "Email is the v1 channel (vs push/SMS)",
+        "evidence": "stated",
+        "quote": null
+      },
+      {
+        "text": "A category-level cadence heuristic is the realistic start this quarter; per-customer model is later",
+        "evidence": "stated",
+        "quote": null
+      }
+    ],
+    "in_scope": [
+      {
+        "text": "Braze email nudging repeat-friendly customers to reorder favorites",
+        "evidence": "stated",
+        "quote": null
+      },
+      {
+        "text": "Category-level timing heuristic (shorter for everyday, longer for premium)",
+        "evidence": "stated",
+        "quote": null
+      },
+      {
+        "text": "Targeting limited to lower-price wines bought in quantity > 1",
+        "evidence": "stated",
+        "quote": null
+      }
+    ],
+    "out_of_scope": [
+      {
+        "text": "Auto-shipped subscriptions (billing, inventory holds, cancellation)",
+        "evidence": "stated",
+        "quote": "keep that out of scope for v1"
+      },
+      {
+        "text": "New messaging vendor; SMS pending legal consent review",
+        "evidence": "stated",
+        "quote": null
+      }
+    ],
+    "open_decisions": [
+      {
+        "text": "Whether 30 days is the right default timing",
+        "evidence": "stated",
+        "quote": null
+      },
+      {
+        "text": "Who owns the feature — lifecycle campaign vs engineering-built product (possibly hybrid)",
+        "evidence": "stated",
+        "quote": null
+      },
+      {
+        "text": "Channels beyond email (push/SMS) deferred pending consent + capacity",
+        "evidence": "inferred",
+        "quote": null
+      }
+    ]
+  },
+  "technical": {
+    "functional": [
+      {
+        "text": "Identify customers eligible for a reorder nudge from prior purchases",
+        "evidence": "inferred",
+        "quote": null
+      },
+      {
+        "text": "Select eligible products (everyday, lower-price, qty>1; exclude occasion/gift)",
+        "evidence": "stated",
+        "quote": null
+      },
+      {
+        "text": "Trigger a Braze email at a category-derived interval after purchase",
+        "evidence": "stated",
+        "quote": null
+      }
+    ],
+    "non_functional": [
+      {
+        "category": "data",
+        "text": "Needs order-history access to decide what/when to remind",
+        "evidence": "stated"
+      },
+      {
+        "category": "reliability",
+        "text": "Must not email on occasion/gift purchases (bad-experience guardrail)",
+        "evidence": "stated"
+      },
+      {
+        "category": "other",
+        "text": "Frequency cap across all Braze campaigns to prevent over-emailing",
+        "evidence": "stated"
+      },
+      {
+        "category": "compliance",
+        "text": "SMS would require legal sign-off on consent",
+        "evidence": "stated"
+      }
+    ],
+    "affected_systems": [
+      {
+        "text": "Braze (messaging/ESP)",
+        "evidence": "stated",
+        "quote": null
+      },
+      {
+        "text": "Orders / purchase-history service",
+        "evidence": "stated",
+        "quote": null
+      }
+    ],
+    "dependencies": [
+      {
+        "text": "Global Braze frequency cap does not exist yet and may be a hard prerequisite",
+        "evidence": "stated",
+        "quote": null
+      },
+      {
+        "text": "A signal distinguishing 'everyday repeat' from 'occasion' buys (not available today; must approximate)",
+        "evidence": "stated",
+        "quote": null
+      }
+    ],
+    "risks": [
+      {
+        "description": "Email fatigue → unsubscribes and degraded deliverability that takes months to recover",
+        "severity": "high"
+      },
+      {
+        "description": "Wrong reorder timing (wine cadence varies widely) annoys customers",
+        "severity": "medium"
+      },
+      {
+        "description": "Reminding on gift/occasion purchases creates bad experiences",
+        "severity": "medium"
+      }
+    ],
+    "approach_sketch": "v1: a Braze-triggered email to customers with a qualifying repeat-friendly purchase, timed by a category-level heuristic, gated behind a global frequency cap, excluding occasion buys. Per-customer cadence modelling and extra channels deferred. Eng not to start until the frequency-cap dependency is resolved."
+  },
+  "gaps": [
+    {
+      "field": "success metric / target",
+      "why_it_matters": "No defined metric or target (second orders? repeat revenue?) means the team can't agree later whether it worked, or size the investment."
+    },
+    {
+      "field": "feature ownership",
+      "why_it_matters": "Unclear whether lifecycle marketing or engineering owns it; blocks staffing and the build-vs-campaign decision."
+    },
+    {
+      "field": "reorder timing basis",
+      "why_it_matters": "The 30-day default is admittedly a guess; wrong timing is a primary driver of the annoyance risk."
+    },
+    {
+      "field": "occasion-vs-everyday signal",
+      "why_it_matters": "No clean signal exists to exclude gift/occasion buys, yet that exclusion is a core guardrail."
+    },
+    {
+      "field": "frequency-cap prerequisite scope",
+      "why_it_matters": "A global cap doesn't exist and may be large; if it's a hard prerequisite it sets the timeline."
+    },
+    {
+      "field": "target customer segment",
+      "why_it_matters": "Ambiguous whether this targets all repeat-friendly buyers or a subset (e.g., wine club); changes audience size and design."
+    }
+  ],
+  "clarifying_questions": [
+    {
+      "question": "What is the success metric and target (e.g., second-order rate or repeat revenue over what window), and what holdout measures it?",
+      "targets": "success metric / target",
+      "priority": "P0"
+    },
+    {
+      "question": "Is the global Braze frequency cap a hard prerequisite for launch, and who scopes and owns building it?",
+      "targets": "frequency-cap prerequisite scope",
+      "priority": "P0"
+    },
+    {
+      "question": "Who owns this feature end to end — lifecycle marketing, engineering, or a defined hybrid?",
+      "targets": "feature ownership",
+      "priority": "P0"
+    },
+    {
+      "question": "What data can distinguish everyday repeat wines from occasion/gift purchases today, and how accurate must the v1 approximation be?",
+      "targets": "occasion-vs-everyday signal",
+      "priority": "P1"
+    },
+    {
+      "question": "What is the initial category timing heuristic (which categories, which windows) and how will we validate it against real reorder intervals?",
+      "targets": "reorder timing basis",
+      "priority": "P1"
+    },
+    {
+      "question": "Which customers are in the v1 audience — all qualifying repeat buyers or a narrower segment such as wine club?",
+      "targets": "target customer segment",
+      "priority": "P1"
+    }
+  ],
+  "readiness": "needs_clarification",
+  "readiness_rationale": "A clear problem and a sensible v1 shape exist, but launch is blocked on an undefined success metric, unresolved ownership, and a possibly-large frequency-cap prerequisite."
+}

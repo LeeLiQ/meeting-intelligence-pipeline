@@ -55,6 +55,7 @@ class PipelineRunner:
             raw_transcript=ctx.raw_transcript,
             normalized_transcript=ctx.normalized_transcript,
             semantic_json_path=ctx.semantic_json_path,
+            worksheet_path=ctx.worksheet_path,
             prd_path=ctx.prd_path,
             architecture_path=ctx.architecture_path,
             skipped=ctx.skipped,

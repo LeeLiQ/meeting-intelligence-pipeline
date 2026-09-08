@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from helper.pipeline_guards import ConflictReport, QualityVerdict
     from helper.semantic_extractor import SemanticPayload
+    from helper.requirement_worksheet import RequirementWorksheet
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +60,10 @@ class PipelineContext:
     quality_verdict: QualityVerdict | None = None
     conflict_report: ConflictReport | None = None
 
+    # Stage: Requirement Worksheet (the new primary output target)
+    worksheet_path: Path | None = None
+    worksheet: RequirementWorksheet | None = None
+
     # Stage 3: Interpretation (PRD)
     prd_path: Path | None = None
 
@@ -84,6 +89,7 @@ class PipelineResult:
     raw_transcript: Path | None = None
     normalized_transcript: Path | None = None
     semantic_json_path: Path | None = None
+    worksheet_path: Path | None = None
     prd_path: Path | None = None
     architecture_path: Path | None = None
     skipped: bool = False

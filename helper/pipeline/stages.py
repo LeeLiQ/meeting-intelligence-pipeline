@@ -352,3 +352,76 @@ class ArchitectureStage:
         out_path.write_text(f"{llm_ctx.result.text.strip()}\n", encoding="utf-8")
         ctx.architecture_path = out_path
         logger.info("Saved architecture doc: %s", out_path)
+
+
+# ---------------------------------------------------------------------------
+# Stage: Requirement Worksheet (LLM + Pydantic via structured output)
+# ---------------------------------------------------------------------------
+
+class RequirementWorksheetStage:
+    """Fills the requirement-understanding worksheet from the normalized transcript.
+
+    Unlike the PRD/Architecture stages, the goal here is *honesty* about what the
+    meeting does and does not define: the worksheet's ``gaps`` and
+    ``clarifying_questions`` are the primary value. Uses provider-native
+    structured output, so the schema — not a hand-written prompt — guarantees shape.
+    """
+
+    def __init__(self, llm_factory, prompt_loader) -> None:  # noqa: ANN001
+        self._llm_factory = llm_factory
+        self._prompt_loader = prompt_loader
+
+    @property
+    def name(self) -> str:
+        return "Requirement Worksheet"
+
+    def execute(self, ctx: PipelineContext) -> None:
+        from helper.requirement_worksheet import RequirementWorksheet
+
+        source = ctx.normalized_transcript
+        if source is None:
+            raise RuntimeError("RequirementWorksheetStage requires ctx.normalized_transcript to be set.")
+
+        transcript_text = source.read_text(encoding="utf-8")
+        out_path = source.with_suffix("").with_suffix(".worksheet.json")
+
+        prompt_version, system_prompt = self._prompt_loader("requirements")
+        user_prompt = (
+            "Meeting transcript:\n---\n"
+            f"{transcript_text}\n"
+            "---\n\nProduce the requirement-understanding worksheet."
+        )
+
+        provider = self._llm_factory(ctx.config.model)
+        with llm_call_context(
+            prompt_version=prompt_version,
+            model=ctx.config.model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            log_dir=ctx.config.log_dir,
+        ) as llm_ctx:
+            llm_ctx.result = provider.generate(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                model=ctx.config.model,
+                response_format=RequirementWorksheet,
+            )
+
+        raw_text = llm_ctx.result.text.strip()
+        try:
+            worksheet = RequirementWorksheet.model_validate_json(_strip_fences(raw_text))
+        except Exception as exc:
+            raise RuntimeError(
+                f"Requirement worksheet returned invalid JSON/schema: {exc}\n"
+                f"Raw response (first 500 chars):\n{raw_text[:500]}"
+            ) from exc
+
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(worksheet.model_dump_json(indent=2), encoding="utf-8")
+
+        ctx.worksheet_path = out_path
+        ctx.worksheet = worksheet
+        logger.info(
+            "Saved requirement worksheet: %s (readiness=%s, gaps=%d, questions=%d)",
+            out_path, worksheet.readiness, len(worksheet.gaps), len(worksheet.clarifying_questions),
+        )

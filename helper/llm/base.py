@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from pydantic import BaseModel
+
 
 @dataclass
 class LLMResult:
@@ -31,7 +33,14 @@ class LLMProvider(Protocol):
     without needing to explicitly inherit from it (Duck Typing).
     """
 
-    def generate(self, system_prompt: str, user_prompt: str, model: str) -> LLMResult:
+    def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        model: str,
+        *,
+        response_format: type[BaseModel] | None = None,
+    ) -> LLMResult:
         """
         Sends the system and user prompts to the LLM and returns an LLMResult.
 
@@ -39,6 +48,10 @@ class LLMProvider(Protocol):
             system_prompt: High-level instructions for the model's persona/behavior.
             user_prompt: The detailed input/request for the model.
             model: The specific model string to use (e.g., 'gpt-4o-mini', 'gemini-2.5-flash').
+            response_format: Optional Pydantic model class. When provided, the provider
+                is asked to return JSON conforming to this schema (provider-native
+                structured output), and ``LLMResult.text`` holds that JSON string.
+                When None, behaviour is unchanged (free-form text).
 
         Returns:
             LLMResult with .text, .input_tokens, .output_tokens, .total_tokens.
