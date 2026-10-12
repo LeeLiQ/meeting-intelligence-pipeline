@@ -19,7 +19,15 @@
   `coachagent/transcribe.py`。用法：`uv run python -m coachagent.transcribe <audio> [-o out.md] [--model base]`。
   首次对真实录音跑通时顺手验证，不单独占一条。
 
-- [ ] **B3 — 第一次 tool call**：定义 `extract_meeting_notes` 的 tool schema，让模型返回 tool-call 请求，打印其 args。
+- [ ] **B-MVP — workflow 端到端**（2026-10-11 插入，协作模式：双方出骨架 → 对比 → Qian 亲手写）：
+  mp4 → ffmpeg → Whisper → 一次 AI 清理 → 终端问答。骨架见 `outputs/skeleton/r2/`（写代码顺序在其 README §5）。
+  - 验收：`uv run python -m coachagent.cli <mp4>` 产出 `cleaned.md`，并回答"有几个不同的人"（附依据）。
+  - 概念：Protocol vs ABC、依赖注入/Composition Root、Pydantic v2 models、用户级 config/credential store。
+  - 不是 30 min 条目——按 README §5 的 4 步拆着做，每步可独立验证。
+
+- [ ] **B3 — 第一次 tool call**（2026-10-11 改）：给问答加 `search_transcript` / `read_transcript_window` 两个 tool
+  （骨架 `outputs/skeleton/r2/coachagent/tools/`），让模型返回 tool-call 请求，打印其 args。
+  原 `extract_meeting_notes` 并入 B5（它本质是借 tool call 做结构化抽取，和 structured output 重叠）。
   - 目的：tool/function calling 解剖——只到"模型提议调用"，不执行。
   - 验收：能用自己的话说清 tool schema 的三要素，以及模型*何时决定*调用。
   - 概念：tool calling vs structured output（v2 的 confusion pair #1/#3）。对照物：

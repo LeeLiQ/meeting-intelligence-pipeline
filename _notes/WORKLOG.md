@@ -55,3 +55,30 @@
 - Qian 已 commit v3 快照 5811700。目录重整完成：helper/ main.py tests/ prompts/ samples/ → _archive/pipeline-v1/；Whisper 重写为 coachagent/transcribe.py（未对真实录音跑过）；BACKLOG：B1 打勾、B2 取消、B3 置顶并加 SDK 注意；CLAUDE.md 两处路径更新。
 - 待 Qian 本机执行：`git tag pipeline-v1-final 5811700`，然后 `git add -A && git commit -m "archive pipeline-v1; add coachagent.transcribe; cancel B2"`。sandbox 无法删 __pycache__/pytest-cache 残留（gitignored，可手删）。
 - 待 Qian：录音放入 coach/sessions/<date>-<slug>/；找一段公共会议录音作 demo 素材。PLAN v4 由转型 project 写入，本侧未动 PLAN.md。
+
+## 2026-10-11 — 新协作模式 + MVP skeleton r1
+**决策：**
+- 协作模式变更（Qian 提出）：Qian 说目标 → 双方各自出思路/结构（Claude 出带注释的代码骨架，注明 lib/package）→ 对比迭代若干轮 → 确认后 Qian 亲手写。
+- 第一个目标：workflow（非 agent）—— mp4 路径 → 抽音频 → Whisper transcript → 一次 AI 清理 → 终端问答（验收题："有几个不同的人"）。
+- 骨架设计：`ingest/` 做成 package（内部不 print/input，进度走 callback，便于将来接 UI）；`model_providers/` 参考 Pi：统一 Message + ABC `LLMProvider.chat()` + 每家 adapter + `create_provider()` 工厂 + key 解析链（env → .env → getpass）。对话历史放 client 端 `ChatSession`，不用 OpenAI `previous_response_id`。
+- `Transcriber` 用 Protocol、`LLMProvider` 用 ABC（后者有共享方法 `ask()`）。
+**改动：**
+- 新建 `outputs/skeleton/r1/`（README + coachagent 骨架，只有签名/注释/`...`），未动 `coachagent/` 本体。
+**未决项（见 r1 README 第 5 节 Q1–Q6）：**
+- Q1 Whisper 不做 speaker diarization → "几个人"只能 LLM 推断；r1 是否接受（备选 pyannote/whisperx 或云端 diarize）。
+- Q2 清理边界；Q3 不做 chunking；Q4 key 是否写回 .env；Q5 迁移现有 transcribe.py/client.py/hello.py；Q6 产出落 coach/sessions/。
+- 顺带发现：pyproject 的 `google-generativeai` 已 deprecated，加 Gemini 时换 `google-genai`。
+
+## 2026-10-11（续）— skeleton r2
+**决策（Qian 答 r1 Q1–Q6）：** 接受推断式"几个人"；清理一次调用不总结；不做 chunking；key 写回且换更好的存储并确定 default；先 commit 再迁移；产出不泄露即可。
+**r2 新决策（Claude 拍板，待 Qian 审）：**
+- 新增 `config.py`：`~/.coachagent/auth.json`（secrets）+ `settings.json`（default provider/model 等），照 Pi。优先级 CLI > env/.env > settings.json > 内置。仍明文（延续 09-06）。
+- `resolve_api_key` 注入 `prompt` 函数（模块内不 input）；`create_provider` 只收值不收 Settings；`CredentialStore` Protocol 在 model_providers，`FileCredentialStore` 在 config，cli 为 Composition Root。三个叶子模块互不 import。
+- `_make_session_dir` 用 `git check-ignore` 防止产出落到未 ignore 路径。
+- 回答"ffmpeg/whisper 算不算 tool"：不算——无决策空间即 workflow；入口变成对话 agent 后可包成 `transcribe_media` tool，实现即 `ingest_file`。
+- B3 改为 `search_transcript`/`read_transcript_window`；`extract_meeting_notes` 并入 B5。BACKLOG 已插入 B-MVP 并改 B3。
+**改动：** `outputs/skeleton/r2/`（含 tools/ 预告）；BACKLOG.md。
+**未决项：**
+- Qian 本机：删 `.git/index.lock`（本次 sandbox `git status` 残留）→ commit 快照 → 开写 MVP。
+- `_archive/` 下 git 显示 " M" 均为 CRLF 差异（--ignore-cr-at-eol 无 diff），可选 `core.autocrlf true` + `add --renormalize`。
+- 告知 Qian：cleanup/问答会把 transcript 文本发到 OpenAI API；纯本地方案为 Ollama（base_url 已留口）。
