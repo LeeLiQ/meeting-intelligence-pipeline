@@ -40,12 +40,13 @@ class WhisperLocalTranscriber:
         # model_name 默认值可从 env WHISPER_MODEL 读（.env.template 里已有这个键）。
         # 不要在 __init__ 里 load_model —— 那会让 import/构造变慢；
         # 用懒加载：第一次 transcribe 时 load，存到 self._model。
-        ...
+        self._model_name = model_name
+        self._model = None
 
     @property
     def name(self) -> str:
         # f"whisper-local:{model_name}"
-        ...
+        return f"whisper-local:{self._model_name}"
 
     def transcribe(self, audio: Path) -> Transcript:
         # 1. import whisper 放在函数内部（heavy import，torch 加载要几秒）——现有代码已这么做
@@ -54,4 +55,19 @@ class WhisperLocalTranscriber:
         #    —— 可以用 TranscriptSegment.model_validate(seg_dict)，Pydantic 会忽略多余字段
         #       （whisper 的 segment 还有 tokens/avg_logprob 等，我们不要）
         # 4. return Transcript(source=audio, engine=self.name, language=..., segments=...)
-        ...
+        import whisper
+        if self._model is None:
+            self._model = whisper.load_model(self._model_name)
+        try:
+            result = self._model.transcribe(str(audio), fp16=False)
+        except Exception as e:
+            raise RuntimeError(f"Failed to transcribe audio {audio}") from e
+
+        from .models import TranscriptSegment
+        segments = [TranscriptSegment.model_validate(seg) for seg in result["segments"]]
+        return Transcript(
+            source=audio,
+            engine=self.name,
+            language=result.get("language"),
+            segments=segments
+        )

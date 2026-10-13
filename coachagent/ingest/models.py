@@ -46,9 +46,22 @@ class Transcript(BaseModel):
     @property
     def text(self) -> str:
         # 把 segments 拼成整段文本，供 LLM 使用。
-        ...
+        if not self.segments:
+            return ""
+        self.segments.sort(key=lambda s: s.start)  # 按时间排序，确保顺序正确
+        return "\n".join(segment.text for segment in self.segments if segment.text != "")
 
     def to_markdown(self) -> str:
         # 渲染成 raw.transcript.md：头部元信息 + 每段 "[mm:ss] text"。
         # 带时间戳是为了 LLM 能判断"停顿 → 可能换人"，对推断说话人数量有帮助。
-        ...
+        md = f"# Transcript\n\n"
+        md += f"- Source: {self.source}\n"
+        md += f"- Engine: {self.engine}\n"
+        md += f"- Language: {self.language or 'auto-detected'}\n\n"
+        for segment in sorted(self.segments, key=lambda s: s.start):
+            start_min, start_sec = divmod(int(segment.start), 60)
+            end_min, end_sec = divmod(int(segment.end), 60)
+            timestamp = f"[{start_min:02d}:{start_sec:02d} - {end_min:02d}:{end_sec:02d}]"
+            speaker = f"{segment.speaker}: " if segment.speaker else ""
+            md += f"{timestamp} {speaker}{segment.text}\n"
+        return md

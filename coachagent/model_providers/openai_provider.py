@@ -31,7 +31,9 @@ class OpenAIProvider(LLMProvider):   # 显式继承 ABC
         # 只接收"已解析好"的值，不自己去读 env —— 读 env 是 credentials.py 的职责。
         # 好处：测试时直接传假 key 构造，不依赖环境。
         # self._client = OpenAI(api_key=api_key, base_url=base_url)
-        ...
+        from openai import OpenAI
+        self._client = OpenAI(api_key=api_key, base_url=base_url)
+        self.model = model
 
     def chat(self, messages: list[Message], *, temperature: float | None = None) -> ChatResult:
         # 翻译层（adapter 的全部价值都在这里）：
@@ -41,4 +43,26 @@ class OpenAIProvider(LLMProvider):   # 显式继承 ABC
         #    except openai.APIError as e: raise ProviderError(...) from e
         #    `raise X from e` 保留原始异常链，traceback 里能看到根因（≈ C# InnerException）
         # 3. return ChatResult(text=resp.output_text, model=self.model, usage=Usage(...))
-        ...
+        from openai import APIError
+        system_messages = [m.content for m in messages if m.role == "system"]
+        user_and_assistant = [m.model_dump() for m in messages if m.role != "system"]
+        instructions = "\n".join(system_messages)
+        try:
+            resp = self._client.responses.create(
+                model=self.model,
+                instructions=instructions,
+                input=user_and_assistant,
+                temperature=temperature,
+            )
+        except APIError as e:
+            from .base import ProviderError
+            raise ProviderError(str(e)) from e
+        from .base import Usage
+        return ChatResult(
+            text=resp.output_text,
+            model=self.model,
+            usage=Usage(
+                input_tokens=getattr(resp.usage, "input_tokens", None),
+                output_tokens=getattr(resp.usage, "output_tokens", None),
+            ),
+        )

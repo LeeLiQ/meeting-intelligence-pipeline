@@ -18,7 +18,8 @@ VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
 
 class UnsupportedFileError(ValueError):
     # 自定义异常：让 UI/CLI 能区分"格式不支持"和其他错误，给出友好提示。
-    ...
+    def __init__(self, path: Path):
+        super().__init__(f"Unsupported file: {path}")
 
 
 def detect_kind(path: Path) -> SourceFile:
@@ -29,4 +30,12 @@ def detect_kind(path: Path) -> SourceFile:
     #       match ext:
     #           case e if e in VIDEO_EXTS: ...
     # 4. 都不是 → UnsupportedFileError
-    ...
+    if not path.is_file():
+        raise FileNotFoundError(f"File not found: {path}")
+    match path.suffix.lower():
+        case ext if ext in AUDIO_EXTS:
+            return SourceFile(path=path, kind=MediaKind.AUDIO)
+        case ext if ext in VIDEO_EXTS:
+            return SourceFile(path=path, kind=MediaKind.VIDEO)
+        case _:
+            raise UnsupportedFileError(path)

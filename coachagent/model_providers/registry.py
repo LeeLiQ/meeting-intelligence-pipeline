@@ -18,20 +18,21 @@ from .credentials import CredentialStore, PromptFn, ProviderSpec
 def _build_openai(*, api_key: str, model: str, base_url: str | None) -> LLMProvider:
     # from .openai_provider import OpenAIProvider   ← lazy import：只有选中 openai 才加载 openai SDK
     # return OpenAIProvider(api_key=api_key, model=model, base_url=base_url)
-    ...
+    from .openai_provider import OpenAIProvider
+    return OpenAIProvider(api_key=api_key, model=model, base_url=base_url)
 
 
 _REGISTRY: dict[str, tuple[ProviderSpec, Callable[..., LLMProvider]]] = {
-    # "openai": (ProviderSpec("openai", "OPENAI_API_KEY", "OPENAI_MODEL",
-    #                         default_model="gpt-4.1-mini", base_url_env="OPENAI_BASE_URL"),
-    #            _build_openai),
+    "openai": (ProviderSpec("openai", "OPENAI_API_KEY", "OPENAI_MODEL",
+                            default_model="gpt-4.1-mini", base_url_env="OPENAI_BASE_URL"),
+               _build_openai),
     # 加 Gemini：写 gemini_provider.py + 这里一行。其他代码零改动。
     #   注意 pyproject 里的 `google-generativeai` 已 deprecated，新 SDK 是 `google-genai`（from google import genai）
 }
 
 
 def available_providers() -> list[str]:
-    ...
+    return list(_REGISTRY.keys())
 
 
 def create_provider(
@@ -52,4 +53,12 @@ def create_provider(
     # 3. model   = resolve_model(spec, configured_model, model_override)
     # 4. base_url = (os.getenv(spec.base_url_env) if spec.base_url_env else None) or configured_base_url
     # 5. return builder(api_key=api_key, model=model, base_url=base_url)
-    ...
+    from .credentials import resolve_api_key, resolve_model
+    import os
+    if name not in _REGISTRY:
+        raise ValueError(f"Unknown provider {name!r}, available: {available_providers()}")
+    spec, builder = _REGISTRY[name]
+    api_key = resolve_api_key(spec, store, prompt=prompt)
+    model = resolve_model(spec, configured_model, model_override)
+    base_url = (os.getenv(spec.base_url_env) if spec.base_url_env else None) or configured_base_url
+    return builder(api_key=api_key, model=model, base_url=base_url)

@@ -10,7 +10,15 @@
     registry.py          name → provider 的工厂
 """
 
-# from .base import ChatResult, LLMProvider, Message, ProviderError
-# from .registry import available_providers, create_provider
-#
-# __all__ = [...]
+from .base import ChatResult, LLMProvider, Message, ProviderError
+from .registry import available_providers, create_provider
+
+__all__ = [
+    "ChatResult",
+    "LLMProvider",
+    "Message",
+    "ProviderError",
+    "available_providers",
+    "create_provider",
+    "MissingCredentialsError"
+]

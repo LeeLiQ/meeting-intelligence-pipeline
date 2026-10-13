@@ -31,4 +31,8 @@ def clean_transcript(transcript: Transcript, provider: LLMProvider) -> str:
     #    或者更简单：temperature=None 时不传。r2 选后者，遇到再说。
     #
     # 已确认不做（Q3）：chunking。一次调用。
-    ...
+    try:
+        text = transcript.to_markdown()
+        return provider.ask(text, system=CLEANUP_SYSTEM_PROMPT, temperature=0.1)
+    except Exception as e:
+        raise RuntimeError(f"Failed to clean transcript: {e}") from e

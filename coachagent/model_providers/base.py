@@ -40,7 +40,8 @@ class ChatResult(BaseModel):
 class ProviderError(RuntimeError):
     # 把各家 SDK 的异常（openai.AuthenticationError、openai.RateLimitError…）统一包装成这个，
     # 上层不需要 import openai 就能 catch。
-    ...
+    def __init__(self, message: str):
+        super().__init__(message)
 
 
 class LLMProvider(ABC):
@@ -53,14 +54,18 @@ class LLMProvider(ABC):
     def chat(self, messages: list[Message], *, temperature: float | None = None) -> ChatResult:
         # 唯一必须实现的方法：给一串消息，返回 assistant 的回复。
         # 无状态——历史由调用方（ChatSession）维护并每次完整传入。
-        ...
+        raise NotImplementedError("Subclasses must implement the chat method.")
 
     # ---- 以下是共享行为，子类白拿（这就是选 ABC 而不是 Protocol 的原因）----
 
     def ask(self, prompt: str, *, system: str | None = None, temperature: float | None = None) -> str:
         # 单发便捷方法：拼成 [system?, user] → self.chat(..., temperature=temperature) → 返回 .text
         # cleanup.py 用它（temperature=0.1）。
-        ...
+        messages_to_send = []
+        if system is not None:
+            messages_to_send.append(Message(role="system", content=system))
+        messages_to_send.append(Message(role="user", content=prompt))
+        return self.chat(messages_to_send, temperature=temperature).text
 
     # B3 预告（不在 MVP）：chat() 会加一个参数 tools: list[ToolSpec] | None，
     # ChatResult 会多出 tool_calls: list[ToolCall]。见 coachagent/tools/ 和 README 第 4 节。

@@ -37,6 +37,9 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+import json 
+
+
 CONFIG_DIR = Path.home() / ".coachagent"
 AUTH_FILE = CONFIG_DIR / "auth.json"
 SETTINGS_FILE = CONFIG_DIR / "settings.json"
@@ -58,13 +61,21 @@ def load_settings() -> Settings:
     # 文件不存在 → Settings()（全默认值）
     # 存在 → Settings.model_validate_json(SETTINGS_FILE.read_text(encoding="utf-8"))
     #   文件被手改坏了（ValidationError）→ 报错指出是哪个字段，不要静默吞掉
-    ...
+    if not SETTINGS_FILE.exists():
+        return Settings()
+    try:
+        return Settings.model_validate_json(SETTINGS_FILE.read_text(encoding="utf-8"))
+    except pydantic.ValidationError as e:
+        raise RuntimeError(f"Failed to load settings from {SETTINGS_FILE}: {e}") from e
 
 
 def save_settings(settings: Settings) -> None:
     # CONFIG_DIR.mkdir(exist_ok=True)
     # 原子写：先写 settings.json.tmp 再 Path.replace() 覆盖 —— 防止写一半崩溃留下坏文件
-    ...
+    CONFIG_DIR.mkdir(exist_ok=True)
+    tmp_file = SETTINGS_FILE.with_suffix(".json.tmp")
+    tmp_file.write_text(settings.model_dump_json(indent=2), encoding="utf-8")
+    tmp_file.replace(SETTINGS_FILE)
 
 
 class FileCredentialStore:
@@ -73,12 +84,25 @@ class FileCredentialStore:
     # ≈ C#：接口定义在 Core 层，实现放在 Infrastructure 层，Composition Root 注入。
 
     def __init__(self, path: Path = AUTH_FILE) -> None:
-        ...
+        self.path = path
 
     def get(self, provider: str) -> str | None:
         # 读 auth.json → data.get(provider, {}).get("api_key")
-        ...
+        if not self.path.exists():
+            return None
+        data = json.loads(self.path.read_text(encoding="utf-8"))
+        return data.get(provider, {}).get("api_key")
 
     def set(self, provider: str, api_key: str) -> None:
         # 读-改-写，原子写同上
-        ...
+        if self.path.exists():
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+        else:
+            data = {}
+        if provider not in data:
+            data[provider] = {}
+        data[provider]["api_key"] = api_key
+        tmp_file = self.path.with_suffix(".json.tmp")
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        tmp_file.replace(self.path)

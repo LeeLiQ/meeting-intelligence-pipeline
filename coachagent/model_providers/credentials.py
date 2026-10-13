@@ -36,7 +36,8 @@ class ProviderSpec:
 
 
 class MissingCredentialError(RuntimeError):
-    ...
+    def __init__(self, message: str):
+        super().__init__(message)
 
 
 PromptFn = Callable[[str], str]   # 给一个提示语，返回用户输入；getpass.getpass 恰好是这个签名
@@ -52,14 +53,31 @@ def resolve_api_key(spec: ProviderSpec, store: CredentialStore, *, prompt: Promp
     #     store.set(spec.name, key)                             ← 写回，下次不问
     #     return key
     # raise MissingCredentialError(f"set {spec.api_key_env} or run interactively")
-    ...
+    import os
+    if key := os.getenv(spec.api_key_env):
+        return key
+    if key := store.get(spec.name):
+        return key
+    if prompt and (key := prompt(f"{spec.name} API key（输入不显示）: ").strip()):
+        store.set(spec.name, key)
+        return key
+    raise MissingCredentialError(f"set {spec.api_key_env} or run interactively")
 
 
 def resolve_model(spec: ProviderSpec, configured: str | None, override: str | None = None) -> str:
     # override(--model) > os.getenv(spec.model_env) > configured(settings.json) > spec.default_model
-    ...
+    import os
+    if override:
+        return override
+    if env_model := os.getenv(spec.model_env):
+        return env_model
+    if configured:
+        return configured
+    return spec.default_model
 
 
 def mask_key(key: str) -> str:
     # "sk-...abcd"
-    ...
+    if len(key) <= 4:
+        return "*" * len(key)
+    return "*" * (len(key) - 4) + key[-4:]

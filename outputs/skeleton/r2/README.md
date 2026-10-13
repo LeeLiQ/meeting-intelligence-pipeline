@@ -94,6 +94,75 @@ B4 之后的 `transcribe_media(path)` tool，而它的实现就是一行 `ingest
 
 r2 **无需 `uv add`**：用到的都是 stdlib 或 pyproject 里已有的包。
 
+### 5.1 每步的"手跑一次"命令（smoke test）
+
+"手跑一次" = 还没有 `cli.py` 时，直接调用这一步对外的函数，确认能用再往下写。不是正式测试。
+在 **repo 根目录** 的 PowerShell 里跑。先设一次变量，后面的命令都用它（PowerShell 会把双引号里的 `$mp4` 展开）：
+
+```powershell
+cd C:\Users\qli\Documents\Playground\meeting-intelligence-pipeline
+$mp4 = 'C:\Users\qli\Videos\2026-10-08 09-37-16.mp4'   # 换成你的文件
+```
+
+**Step 1 — detect + audio** ✅ 2026-10-11 已通过
+
+```powershell
+uv run python -c "from pathlib import Path; from coachagent.ingest.detect import detect_kind; from coachagent.ingest.audio import extract_audio; src = detect_kind(Path(r'$mp4')); print(src); print(extract_audio(src.path, Path('coach/sessions/_test')))"
+```
+- 期望：打印 `kind=<MediaKind.VIDEO: 'video'>`，再打印一个 `.wav` 路径；文件能播放。
+- 反例也试一下：`.txt` → `UnsupportedFileError`；不存在的路径 → `FileNotFoundError`。
+- 踩过的坑：输出目录不存在时 ffmpeg 退出码 `4294967294`（= -2，ENOENT）→ `out_dir.mkdir(parents=True, exist_ok=True)`；
+  并把 `CalledProcessError` 的 stderr 末几行包进异常，否则只看到一个数字。
+
+**Step 2 — transcriber + service**（慢：base 模型 CPU 上大约是音频时长的 0.3–1 倍）
+
+```powershell
+uv run python -c "from pathlib import Path; from coachagent.ingest.service import ingest_file; t = ingest_file(Path(r'$mp4'), work_dir=Path('coach/sessions/_test'), on_progress=print); print(t.engine, t.language, len(t.segments)); print(t.text[:500])"
+```
+- 期望：progress 依次打印；`coach/sessions/_test/` 下出现 `raw.transcript.md` 和 `raw.transcript.json`。
+- 验证 json 可重新加载（后面 `--from-json` 靠它，不用再等 Whisper）：
+
+```powershell
+uv run python -c "from pathlib import Path; from coachagent.ingest.models import Transcript; t = Transcript.model_validate_json(Path('coach/sessions/_test/raw.transcript.json').read_text(encoding='utf-8')); print(len(t.segments), t.segments[0])"
+```
+
+**Step 3 — config + model_providers**（替代 `hello.py` 的验收）
+
+```powershell
+uv run python -c "from getpass import getpass; from dotenv import load_dotenv; load_dotenv(); from coachagent.config import load_settings, FileCredentialStore; from coachagent.model_providers.registry import create_provider; s = load_settings(); ps = s.providers.get(s.default_provider); p = create_provider(s.default_provider, store=FileCredentialStore(), configured_model=ps.model if ps else None, prompt=getpass); print(p.name, p.model); print(p.ask('Reply with one short sentence and name your model.'))"
+```
+- 期望：打印 `openai <model>`，然后一句模型回复。
+- 测"没有 key → 提示输入 → 写回"这条路径：临时去掉 `load_dotenv();` 那一段（且确认系统环境变量里没有 `OPENAI_API_KEY`），
+  应该出现输入提示；输入后 `~\.coachagent\auth.json` 生成；再跑一次不再提示。
+  查看：`Get-Content $HOME\.coachagent\auth.json`（**只看结构，别截图/贴出来**）。
+
+**Step 4a — cleanup**（用 Step 2 的 json，不跑 Whisper）
+
+```powershell
+uv run python -c "from pathlib import Path; from getpass import getpass; from dotenv import load_dotenv; load_dotenv(); from coachagent.ingest.models import Transcript; from coachagent.config import FileCredentialStore; from coachagent.model_providers.registry import create_provider; from coachagent.cleanup import clean_transcript; t = Transcript.model_validate_json(Path('coach/sessions/_test/raw.transcript.json').read_text(encoding='utf-8')); p = create_provider('openai', store=FileCredentialStore(), prompt=getpass); c = clean_transcript(t, p); Path('coach/sessions/_test/cleaned.md').write_text(c, encoding='utf-8'); print(c[:800])"
+```
+- 期望：`_test/cleaned.md` 生成；有标点、分段、保留时间戳、没有被总结。打开对照 `raw.transcript.md` 看一眼。
+
+**Step 4b — chat**（用 4a 的 cleaned.md；第二问用来验证多轮历史）
+
+```powershell
+uv run python -c "from pathlib import Path; from getpass import getpass; from dotenv import load_dotenv; load_dotenv(); from coachagent.config import FileCredentialStore; from coachagent.model_providers.registry import create_provider; from coachagent.chat import ChatSession; p = create_provider('openai', store=FileCredentialStore(), prompt=getpass); s = ChatSession(p, context=Path('coach/sessions/_test/cleaned.md').read_text(encoding='utf-8')); print(s.ask('这份文档里有几个不同的人？')); print('-----'); print(s.ask('你刚才的依据里，哪一条最有把握？')); print(len(s.history))"
+```
+- 期望：第一问带依据 + 置信度；第二问能接上第一问（说明历史生效）；`len(history)` = 5（system + 2×user + 2×assistant）。
+
+**Step 4c — 端到端（cli）**
+
+```powershell
+uv run python -m coachagent.cli $mp4
+# 之后调试问答，跳过 Whisper：
+uv run python -m coachagent.cli --from-json coach/sessions/<日期>-<文件名>/raw.transcript.json
+```
+- 期望：`~\.coachagent\settings.json` 首次生成并打印路径；session 目录有 `raw.transcript.md/json` + `cleaned.md`；
+  问"这份文档里有几个不同的人"得到带依据 + 置信度的回答；`git status` 里看不到 `coach/sessions/` 下任何文件。
+- 收尾：删掉 `coach/sessions/_test/`。
+
+> 命令太长不好改时：`uv run python` 进 REPL 一行行敲，或写进 `_scratch/try_stepN.py` 再 `uv run python _scratch/try_stepN.py`。
+
 ## 6. Q5：commit → 迁移（你在本机 PowerShell 里跑，sandbox 写不了 .git）
 
 ```powershell

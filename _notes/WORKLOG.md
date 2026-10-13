@@ -82,3 +82,30 @@
 - Qian 本机：删 `.git/index.lock`（本次 sandbox `git status` 残留）→ commit 快照 → 开写 MVP。
 - `_archive/` 下 git 显示 " M" 均为 CRLF 差异（--ignore-cr-at-eol 无 diff），可选 `core.autocrlf true` + `add --renormalize`。
 - 告知 Qian：cleanup/问答会把 transcript 文本发到 OpenAI API；纯本地方案为 Ollama（base_url 已留口）。
+
+## 2026-10-11（续）— B-MVP Step 1 通过
+- Qian 已开写 `coachagent/`（骨架拷入后填实现）。Step 1（detect + audio）手跑通过。
+- 踩坑：输出目录不存在 → ffmpeg 退出码 4294967294（-2/ENOENT）。修复：`out_dir.mkdir(parents=True, exist_ok=True)`；并建议把 CalledProcessError 的 stderr 尾部包进异常。
+- Qian 自评：新语言环境下容易忘记 try/except（非阻塞，熟悉后补）。
+- r2 README 新增 §5.1：Step 1–4 的 smoke test 命令（PowerShell，`$mp4` 变量）。
+
+## 2026-10-12 — B-MVP Step 2–3 完成，进入 Step 4
+- Step 3 通过：create_provider → ask 能回话（key 来自 .env）。registry 的 openai 条目由 Qian 取消注释（骨架本就留空）。
+- config.py 修正：FileCredentialStore.set() 补 mkdir；save_settings 加 indent=2；json import 挪顶部；load_settings 改 catch ValidationError。
+- **Loose end：** auth.json 写回分支未实测。因为 .env 的 OPENAI_API_KEY 优先级更高，prompt → store.set 这条路走不到。
+  测法：当前终端 `Remove-Item Env:OPENAI_API_KEY`（若 `Test-Path` 为 True），去掉命令里的 load_dotenv，跑 r2 README §5.1 Step 3。
+  期望：提示输入 → 生成 ~/.coachagent/auth.json → 再跑不提示。
+
+## 2026-10-12（续）— 架构可视化
+- Qian 需求：Python 代码零碎，看不清 class/函数关系。
+- 产出 `outputs/architecture/ARCHITECTURE.md`：模块依赖 flowchart、类与函数 classDiagram（`<<functions>>` 框 ≈ C# static class；虚线 = Protocol 结构化实现）、cli 运行 sequenceDiagram。三张 Mermaid 已用 mermaid@11 parse 校验通过。
+- 自动生成：`uvx --from pylint pyreverse -o mmd ...` 已在本 repo 验证可跑；局限：看不见 Protocol 结构化实现、顶层函数。
+- 可选未加：`import-linter` 强制模块边界；显式继承 Protocol 让关系可见。
+- 发现：`ingest/__init__.py`、`model_providers/__init__.py` re-export 仍是注释 → cleanup.py/chat.py 的 `from coachagent.ingest import ...` 会 ImportError（Step 4a 前要补）。~~registry 顶层 import openai_provider~~（更正：实为函数内 lazy import，Claude 误读）。
+
+## 2026-10-12（续）— import-linter 约束
+- 应 Qian 要求加模块边界约束：pyproject.toml 追加 `[tool.importlinter]` 3 条契约（layers: cli > cleanup|chat > ingest|model_providers|config；ingest 禁 openai/google；model_providers 禁 whisper）。备份：`_scratch/pyproject.toml.<ts>.bak`。
+- 验证：当前代码 3 kept；在 /tmp 副本注入违规（含函数内 lazy import）→ 正确报 2 broken 并给出行号。
+- **待 Qian 本机**：`uv add --dev import-linter`（sandbox 不能动 Windows .venv/uv.lock），之后 `uv run lint-imports`。
+- Review `__init__.py`：结构正确。建议 model_providers 再导出 `MissingCredentialError`（cli 要 catch）。~~registry 顶层 import~~ 更正：该 import 本就在 `_build_openai` 内，是 Claude 读 ast.walk 扫描结果时误判，无需改动。
+- ARCHITECTURE.md §5 更新为"已加"。新增模块（B3 tools/）需加入 layers。
