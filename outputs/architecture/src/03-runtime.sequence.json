@@ -1,0 +1,236 @@
+{
+ "schema_version": 1,
+ "diagram_type": "sequence",
+ "meta": {
+  "title": "运行时序：一次 uv run python -m coachagent.cli x.mp4",
+  "output": "03-runtime.html",
+  "quality_profile": "showcase",
+  "locale": "zh-CN"
+ },
+ "participants": [
+  {
+   "id": "user",
+   "type": "external",
+   "label": "你",
+   "sublabel": "终端"
+  },
+  {
+   "id": "cli",
+   "type": "frontend",
+   "label": "cli.main()",
+   "sublabel": "≈ Program.cs"
+  },
+  {
+   "id": "config",
+   "type": "backend",
+   "label": "config",
+   "sublabel": "settings / auth"
+  },
+  {
+   "id": "reg",
+   "type": "backend",
+   "label": "create_provider",
+   "sublabel": "registry + credentials"
+  },
+  {
+   "id": "ingest",
+   "type": "backend",
+   "label": "ingest_file",
+   "sublabel": "ffmpeg + Whisper"
+  },
+  {
+   "id": "cleanup",
+   "type": "backend",
+   "label": "clean_transcript",
+   "sublabel": "cleanup.py"
+  },
+  {
+   "id": "chat",
+   "type": "backend",
+   "label": "ChatSession",
+   "sublabel": "chat.py"
+  },
+  {
+   "id": "llm",
+   "type": "cloud",
+   "label": "OpenAIProvider",
+   "sublabel": "→ OpenAI API"
+  }
+ ],
+ "segments": [
+  {
+   "from": 160,
+   "to": 324,
+   "label": "启动（Composition Root）"
+  },
+  {
+   "from": 354,
+   "to": 428,
+   "label": "③ 转写（本地，几分钟）"
+  },
+  {
+   "from": 458,
+   "to": 570,
+   "label": "④ 清理（1 次 LLM）"
+  },
+  {
+   "from": 600,
+   "to": 764,
+   "label": "⑤ REPL 循环"
+  }
+ ],
+ "messages": [
+  {
+   "id": "run",
+   "from": "user",
+   "to": "cli",
+   "y": 172,
+   "label": "x.mp4",
+   "variant": "emphasis"
+  },
+  {
+   "id": "load",
+   "from": "cli",
+   "to": "config",
+   "y": 202,
+   "label": "① load_settings()"
+  },
+  {
+   "id": "settings",
+   "from": "config",
+   "to": "cli",
+   "y": 232,
+   "label": "Settings",
+   "variant": "return"
+  },
+  {
+   "id": "mk",
+   "from": "cli",
+   "to": "reg",
+   "y": 262,
+   "label": "② create_provider(store=…)",
+   "note": "缺 key 在这里就失败"
+  },
+  {
+   "id": "prov",
+   "from": "reg",
+   "to": "cli",
+   "y": 314,
+   "label": "LLMProvider",
+   "variant": "return"
+  },
+  {
+   "id": "ing",
+   "from": "cli",
+   "to": "ingest",
+   "y": 366,
+   "label": "ingest_file(path, work_dir)",
+   "variant": "emphasis",
+   "note": "写 raw.transcript.md/json"
+  },
+  {
+   "id": "tr",
+   "from": "ingest",
+   "to": "cli",
+   "y": 418,
+   "label": "Transcript",
+   "variant": "return"
+  },
+  {
+   "id": "cl",
+   "from": "cli",
+   "to": "cleanup",
+   "y": 470,
+   "label": "clean(transcript, provider)",
+   "variant": "emphasis"
+  },
+  {
+   "id": "ask",
+   "from": "cleanup",
+   "to": "llm",
+   "y": 500,
+   "label": "ask(text, system=…)"
+  },
+  {
+   "id": "askr",
+   "from": "llm",
+   "to": "cleanup",
+   "y": 530,
+   "label": "cleaned text",
+   "variant": "return"
+  },
+  {
+   "id": "clr",
+   "from": "cleanup",
+   "to": "cli",
+   "y": 560,
+   "label": "str → cleaned.md",
+   "variant": "return"
+  },
+  {
+   "id": "q",
+   "from": "user",
+   "to": "cli",
+   "y": 612,
+   "label": "问题"
+  },
+  {
+   "id": "sa",
+   "from": "cli",
+   "to": "chat",
+   "y": 642,
+   "label": "session.ask(q)"
+  },
+  {
+   "id": "ch",
+   "from": "chat",
+   "to": "llm",
+   "y": 672,
+   "label": "chat(全部历史)"
+  },
+  {
+   "id": "chr",
+   "from": "llm",
+   "to": "chat",
+   "y": 724,
+   "label": "ChatResult",
+   "variant": "return"
+  },
+  {
+   "id": "ans",
+   "from": "cli",
+   "to": "user",
+   "y": 754,
+   "label": "print 回答",
+   "variant": "return"
+  }
+ ],
+ "cards": [
+  {
+   "dot": "cyan",
+   "title": "对照 ASP.NET",
+   "items": [
+    "启动段 = Program.cs 里 builder.Services 注册 + Build()",
+    "③④⑤ = app.Run() 之后真正处理请求",
+    "只是这里没有 DI 容器：cli 手动 new 并传参"
+   ]
+  },
+  {
+   "dot": "emerald",
+   "title": "为什么先 ② 后 ③",
+   "items": [
+    "Whisper 要跑几分钟",
+    "先建 provider，key 缺失立即报错（fail fast）"
+   ]
+  },
+  {
+   "dot": "amber",
+   "title": "状态在哪",
+   "items": [
+    "OpenAIProvider 无状态 ≈ HttpClient",
+    "ChatSession 有状态：messages 列表",
+    "失败时回滚刚加的 user 消息"
+   ]
+  }
+ ]
+}

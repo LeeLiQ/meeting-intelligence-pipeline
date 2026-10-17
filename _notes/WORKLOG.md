@@ -109,3 +109,25 @@
 - **待 Qian 本机**：`uv add --dev import-linter`（sandbox 不能动 Windows .venv/uv.lock），之后 `uv run lint-imports`。
 - Review `__init__.py`：结构正确。建议 model_providers 再导出 `MissingCredentialError`（cli 要 catch）。~~registry 顶层 import~~ 更正：该 import 本就在 `_build_openai` 内，是 Claude 读 ast.walk 扫描结果时误判，无需改动。
 - ARCHITECTURE.md §5 更新为"已加"。新增模块（B3 tools/）需加入 layers。
+
+## 2026-10-13 — Python review 最小范围
+- 应 Qian 要求，基于 coachagent/ 现状整理 review Agent 代码所需的 Python 最小范围：`outputs/python-review-minimum.md`（A 新语法 / B 运行时陷阱 / C Pydantic+typing / D LLM 调用层，每项指向 repo 出处）。
+- 顺带用清单 review 现有代码，sandbox 实测确认 4 个 🔴：cleanup.py import 不存在的 BadRequestError（ImportError）且该分支会返回 None；model_providers `__all__` 拼错 MissingCredentialsError；config.py `pydantic.ValidationError` 未 import（NameError）。
+- 未改代码（留给 Qian 亲手修，B-MVP 协作模式）。建议：开 Pylance basic type checking + 每模块跑一次 import smoke。
+
+## 2026-10-13 — Step 4 code review
+- 产出 `outputs/reviews/2026-10-13-step4-review.md`。ruff 22 处报错（20 处未定义名），import-linter 3/3 kept。
+- 🔴 阻塞：cli.py 缺全部 import、session_dir 未定义、125 行漏 `#`（中文被当标识符 → NameError）、无路径参数时未调交互输入；cleanup.py import 不存在的 `BadRequestError`；model_providers `__all__` 拼写 `MissingCredentialsError` 且未 import。
+- 🟠 关键行为 bug：ChatSession 把所有异常包成 RuntimeError → cli REPL 的 `except ProviderError` 永不命中（"出错不退出 REPL"失效）；clean_transcript 的 except 分支可能隐式返回 None。原则：只在跨抽象边界转换异常，回滚用 bare `raise`；temperature 兼容属 adapter 职责（kwargs 省略 None——SDK 默认 omit，显式 None 会发 null）。
+- 其他：config.py `pydantic.ValidationError` 未 import（潜伏）；--from-json/--whisper-model 未接通；未写默认 settings.json；Q6 `git check-ignore` 未实现；EOFError；progress 顺序；property 副作用；prompt 缩进与前言。
+- 给出 cli.py 参考结构（`main(argv) -> int`、互斥组、`_ensure_ignored`、`_repl`），argparse 部分 sandbox 实测通过。
+- 建议：`uv add --dev ruff` + Pylance standard 类型检查，弥补 Python 无编译期检查。
+
+## 2026-10-16 — 架构图重做（Mermaid → Archify）
+- Qian 反馈：10-12 的 Mermaid 图仍难懂、看不清。根因诊断：一张 classDiagram 混了三个层级（模块依赖 + 全部 class/函数 + Protocol 线），没有"从入口读起"的路径。
+- 调研 Archify（tt-a1i/archify，MIT，v3.1）：agent 写 typed JSON → Node 渲染成单文件交互 HTML（缩放/路径高亮/暗亮主题/导出 PNG·SVG），带 schema + 布局 + 真浏览器校验。
+  适合：入口/架构/时序这种"讲给人看"的图。局限：不从代码自动解析，校验只保证图没画坏、不保证与代码一致；代码改了要手动更新 JSON。
+- 在 sandbox 实跑 archify（git clone + @sparticuz/chromium 当 ARCHIFY_CHROME），3 张图 finalize 全部 4 gates pass，并截图人工看过（亮/暗）。
+- 产出 `outputs/architecture/`：`01-overview.html`（cli.main ≈ Program.cs，①→⑤ 调用顺序 + DI）、`02-packages.html`（包 ≈ csproj，__init__ ≈ public 表面，Protocol 虚线）、`03-runtime.html`（时序）；JSON 源在 `src/`；ARCHITECTURE.md 改为阅读顺序 + C# 映射表。旧版备份 `_scratch/ARCHITECTURE.md.20261016-150043.bak`。
+- 布局取舍：01 图把 ffmpeg/Whisper 并进 ingest_file 的 sublabel（否则 ②③ 行序要颠倒才能不交叉）。
+- 未决：Qian 本机若要自己改图需 `npx skills add tt-a1i/archify -g`（Claude Code）；B3 加 tools/ 时同步更新 src/01-overview。

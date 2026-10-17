@@ -1,6 +1,8 @@
-from openai import OpenAI
-from dotenv import load_dotenv
 import os
+
+from dotenv import load_dotenv
+from openai import OpenAI
+
 
 def get_openai_client():
     load_dotenv()

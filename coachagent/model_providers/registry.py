@@ -53,8 +53,9 @@ def create_provider(
     # 3. model   = resolve_model(spec, configured_model, model_override)
     # 4. base_url = (os.getenv(spec.base_url_env) if spec.base_url_env else None) or configured_base_url
     # 5. return builder(api_key=api_key, model=model, base_url=base_url)
-    from .credentials import resolve_api_key, resolve_model
     import os
+
+    from .credentials import resolve_api_key, resolve_model
     if name not in _REGISTRY:
         raise ValueError(f"Unknown provider {name!r}, available: {available_providers()}")
     spec, builder = _REGISTRY[name]

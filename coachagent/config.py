@@ -33,12 +33,10 @@ lib: stdlib `json`、`pathlib.Path.home()`
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from pydantic import BaseModel, Field
-
-import json 
-
+from pydantic import BaseModel, Field, ValidationError
 
 CONFIG_DIR = Path.home() / ".coachagent"
 AUTH_FILE = CONFIG_DIR / "auth.json"
@@ -65,7 +63,7 @@ def load_settings() -> Settings:
         return Settings()
     try:
         return Settings.model_validate_json(SETTINGS_FILE.read_text(encoding="utf-8"))
-    except pydantic.ValidationError as e:
+    except ValidationError as e:
         raise RuntimeError(f"Failed to load settings from {SETTINGS_FILE}: {e}") from e
 
 

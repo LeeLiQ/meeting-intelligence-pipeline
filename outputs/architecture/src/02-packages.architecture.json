@@ -1,0 +1,350 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "包视图：每个包 ≈ 一个 C# project，__init__.py ≈ public 表面",
+  "output": "02-packages.html",
+  "quality_profile": "showcase",
+  "locale": "zh-CN",
+  "legend": {
+   "entries": {
+    "frontend": {
+     "label": "入口 / 调用方"
+    },
+    "backend": {
+     "label": "内部 .py 文件"
+    },
+    "database": {
+     "label": "DTO / 数据结构"
+    },
+    "security": {
+     "label": "__init__.py 公开 API"
+    }
+   }
+  }
+ },
+ "components": [
+  {
+   "id": "cli",
+   "type": "frontend",
+   "label": "cli.py",
+   "sublabel": "只 import 包的公开名字",
+   "pos": [
+    40,
+    350
+   ],
+   "size": [
+    150,
+    64
+   ]
+  },
+  {
+   "id": "i_api",
+   "type": "security",
+   "label": "ingest/__init__.py",
+   "sublabel": "公开：ingest_file · Transcript",
+   "pos": [
+    290,
+    160
+   ],
+   "size": [
+    210,
+    64
+   ]
+  },
+  {
+   "id": "i_service",
+   "type": "backend",
+   "label": "service.py",
+   "sublabel": "ingest_file() 编排",
+   "pos": [
+    580,
+    160
+   ],
+   "size": [
+    170,
+    64
+   ]
+  },
+  {
+   "id": "i_detect",
+   "type": "backend",
+   "label": "detect.py",
+   "sublabel": "detect_kind()",
+   "pos": [
+    830,
+    70
+   ],
+   "size": [
+    170,
+    60
+   ]
+  },
+  {
+   "id": "i_audio",
+   "type": "backend",
+   "label": "audio.py",
+   "sublabel": "extract_audio() → ffmpeg",
+   "pos": [
+    830,
+    162
+   ],
+   "size": [
+    170,
+    60
+   ]
+  },
+  {
+   "id": "i_trans",
+   "type": "backend",
+   "label": "transcribers.py",
+   "sublabel": "Transcriber(Protocol) · Whisper",
+   "pos": [
+    830,
+    254
+   ],
+   "size": [
+    190,
+    60
+   ]
+  },
+  {
+   "id": "i_models",
+   "type": "database",
+   "label": "models.py",
+   "sublabel": "Transcript · Segment（DTO）",
+   "pos": [
+    1090,
+    162
+   ],
+   "size": [
+    180,
+    60
+   ]
+  },
+  {
+   "id": "m_api",
+   "type": "security",
+   "label": "model_providers/__init__.py",
+   "sublabel": "公开：create_provider · LLMProvider",
+   "pos": [
+    290,
+    490
+   ],
+   "size": [
+    230,
+    64
+   ]
+  },
+  {
+   "id": "m_registry",
+   "type": "backend",
+   "label": "registry.py",
+   "sublabel": "create_provider() 工厂",
+   "pos": [
+    600,
+    490
+   ],
+   "size": [
+    170,
+    64
+   ]
+  },
+  {
+   "id": "m_cred",
+   "type": "backend",
+   "label": "credentials.py",
+   "sublabel": "CredentialStore(Protocol) · 解析 key",
+   "pos": [
+    850,
+    550
+   ],
+   "size": [
+    210,
+    60
+   ]
+  },
+  {
+   "id": "m_openai",
+   "type": "backend",
+   "label": "openai_provider.py",
+   "sublabel": "OpenAIProvider(LLMProvider)",
+   "pos": [
+    850,
+    430
+   ],
+   "size": [
+    210,
+    60
+   ]
+  },
+  {
+   "id": "m_base",
+   "type": "backend",
+   "label": "base.py",
+   "sublabel": "LLMProvider(ABC) · Message",
+   "pos": [
+    1120,
+    430
+   ],
+   "size": [
+    180,
+    60
+   ]
+  },
+  {
+   "id": "config",
+   "type": "backend",
+   "label": "config.py",
+   "sublabel": "FileCredentialStore · Settings",
+   "pos": [
+    850,
+    690
+   ],
+   "size": [
+    210,
+    64
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "ingest/  ≈ Ingest.csproj（不碰 LLM）",
+   "wraps": [
+    "i_api",
+    "i_service",
+    "i_detect",
+    "i_audio",
+    "i_trans",
+    "i_models"
+   ]
+  },
+  {
+   "kind": "region",
+   "label": "model_providers/  ≈ Providers.csproj（不碰音频）",
+   "wraps": [
+    "m_api",
+    "m_registry",
+    "m_cred",
+    "m_openai",
+    "m_base"
+   ]
+  }
+ ],
+ "connections": [
+  {
+   "id": "cli-i",
+   "from": "cli",
+   "to": "i_api",
+   "label": "③",
+   "variant": "emphasis"
+  },
+  {
+   "id": "cli-m",
+   "from": "cli",
+   "to": "m_api",
+   "label": "②",
+   "variant": "emphasis"
+  },
+  {
+   "id": "cli-c",
+   "from": "cli",
+   "to": "config",
+   "label": "①",
+   "variant": "emphasis"
+  },
+  {
+   "id": "i1",
+   "from": "i_api",
+   "to": "i_service",
+   "label": "re-export"
+  },
+  {
+   "id": "i2",
+   "from": "i_service",
+   "to": "i_detect"
+  },
+  {
+   "id": "i3",
+   "from": "i_service",
+   "to": "i_audio"
+  },
+  {
+   "id": "i4",
+   "from": "i_service",
+   "to": "i_trans"
+  },
+  {
+   "id": "m1",
+   "from": "m_api",
+   "to": "m_registry",
+   "label": "re-export"
+  },
+  {
+   "id": "m2",
+   "from": "m_registry",
+   "to": "m_cred"
+  },
+  {
+   "id": "m3",
+   "from": "m_registry",
+   "to": "m_openai",
+   "label": "lazy import"
+  },
+  {
+   "id": "m4",
+   "from": "m_openai",
+   "to": "m_base",
+   "label": "继承"
+  },
+  {
+   "id": "c-cred",
+   "from": "config",
+   "to": "m_cred",
+   "label": "结构化实现（无 import）",
+   "variant": "dashed"
+  },
+  {
+   "id": "i5",
+   "from": "i_detect",
+   "to": "i_models",
+   "label": "SourceFile"
+  },
+  {
+   "id": "i6",
+   "from": "i_trans",
+   "to": "i_models",
+   "label": "Transcript"
+  }
+ ],
+ "cards": [
+  {
+   "dot": "violet",
+   "title": "公开 vs 内部",
+   "items": [
+    "红框 __init__.py = 包的 public API，外面只能从这里 import",
+    "其余 .py = internal（Python 不强制，靠约定 + import-linter）",
+    "C#：internal 关键字 + project reference；Python：__all__ + lint-imports"
+   ]
+  },
+  {
+   "dot": "emerald",
+   "title": "怎么读一个包",
+   "items": [
+    "先读 __init__.py 的 __all__，知道它对外承诺什么",
+    "再读唯一的编排函数（service.py / registry.py）",
+    "最后才看叶子文件；紫框 models.py 是 DTO"
+   ]
+  },
+  {
+   "dot": "amber",
+   "title": "看不见的线",
+   "items": [
+    "config.FileCredentialStore 没有 import 也没继承 CredentialStore",
+    "只要方法签名对上就算实现（Protocol = 结构化类型）",
+    "C# 没有对应物：这里不写 : ICredentialStore"
+   ]
+  }
+ ]
+}

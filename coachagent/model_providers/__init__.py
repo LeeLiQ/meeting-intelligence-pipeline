@@ -17,8 +17,8 @@ __all__ = [
     "ChatResult",
     "LLMProvider",
     "Message",
+    "MissingCredentialsError",
     "ProviderError",
     "available_providers",
-    "create_provider",
-    "MissingCredentialsError"
+    "create_provider"
 ]

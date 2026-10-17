@@ -9,9 +9,20 @@ lib: 只依赖 coachagent.model_providers 和 coachagent.ingest 的公开 API。
 from __future__ import annotations
 
 from coachagent.ingest import Transcript
-from coachagent.model_providers import LLMProvider
+from coachagent.model_providers import BadRequestError, LLMProvider
 
 CLEANUP_SYSTEM_PROMPT = """\
+    你是会议记录整理员。输入是 ASR 自动转写稿，带 [mm:ss] 时间戳，可能有同音错字、无标点、口头禅。
+    你的任务是：
+      1. 加标点。
+      2. 按话题/停顿分段。
+      3. 删除口头禅和重复（"嗯""那个""you know"）。
+      4. 修正明显的同音错字。
+    注意：
+      - 不要总结、删减实质内容、改变原意、编造说话人姓名。
+      - 保留时间戳（每段开头一个即可）。
+      - 不确定的词用 [?] 标记，而不是猜。
+      - 输出语言与原文一致（中英混杂就保持混杂）。
 """
 # prompt 意图（Q2 已确认）：
 #   - 你是会议记录整理员。输入是 ASR 自动转写稿，带 [mm:ss] 时间戳，可能有同音错字、无标点、口头禅。
@@ -34,5 +45,8 @@ def clean_transcript(transcript: Transcript, provider: LLMProvider) -> str:
     try:
         text = transcript.to_markdown()
         return provider.ask(text, system=CLEANUP_SYSTEM_PROMPT, temperature=0.1)
+    except BadRequestError as e:
+        if "temperature" in str(e):
+            return provider.ask(text, system=CLEANUP_SYSTEM_PROMPT)
     except Exception as e:
         raise RuntimeError(f"Failed to clean transcript: {e}") from e

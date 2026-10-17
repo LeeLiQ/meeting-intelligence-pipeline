@@ -1,0 +1,279 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "coachagent 入口视图：从 cli.main() 读起（≈ Program.cs）",
+  "output": "01-overview.html",
+  "quality_profile": "showcase",
+  "locale": "zh-CN",
+  "legend": {
+   "entries": {
+    "frontend": {
+     "label": "入口（Program.cs）"
+    },
+    "backend": {
+     "label": "Python 函数 / 类"
+    },
+    "database": {
+     "label": "本地文件"
+    },
+    "cloud": {
+     "label": "外部 API"
+    },
+    "external": {
+     "label": "你"
+    }
+   }
+  }
+ },
+ "components": [
+  {
+   "id": "user",
+   "type": "external",
+   "label": "你（终端）",
+   "sublabel": "mp4 / 问题",
+   "pos": [
+    40,
+    316
+   ],
+   "size": [
+    110,
+    64
+   ]
+  },
+  {
+   "id": "cli",
+   "type": "frontend",
+   "label": "cli.main()",
+   "sublabel": "Composition Root",
+   "tag": "≈ Program.cs",
+   "pos": [
+    200,
+    40
+   ],
+   "size": [
+    170,
+    584
+   ]
+  },
+  {
+   "id": "ingest",
+   "type": "backend",
+   "label": "ingest_file()",
+   "sublabel": "ingest/ · 本地 ffmpeg + Whisper",
+   "pos": [
+    500,
+    300
+   ],
+   "size": [
+    200,
+    64
+   ]
+  },
+  {
+   "id": "config",
+   "type": "backend",
+   "label": "load_settings()",
+   "sublabel": "config.py · Settings",
+   "pos": [
+    500,
+    40
+   ],
+   "size": [
+    200,
+    64
+   ]
+  },
+  {
+   "id": "registry",
+   "type": "backend",
+   "label": "create_provider()",
+   "sublabel": "model_providers/ · 工厂",
+   "pos": [
+    500,
+    170
+   ],
+   "size": [
+    200,
+    64
+   ]
+  },
+  {
+   "id": "cleanup",
+   "type": "backend",
+   "label": "clean_transcript()",
+   "sublabel": "cleanup.py · 唯一 AI 步骤",
+   "pos": [
+    500,
+    430
+   ],
+   "size": [
+    200,
+    64
+   ]
+  },
+  {
+   "id": "chat",
+   "type": "backend",
+   "label": "ChatSession.ask()",
+   "sublabel": "chat.py · 持有对话历史",
+   "pos": [
+    500,
+    560
+   ],
+   "size": [
+    200,
+    64
+   ]
+  },
+  {
+   "id": "files",
+   "type": "database",
+   "label": "~/.coachagent/",
+   "sublabel": "settings.json · auth.json",
+   "pos": [
+    820,
+    40
+   ],
+   "size": [
+    190,
+    64
+   ]
+  },
+  {
+   "id": "provider",
+   "type": "backend",
+   "label": "OpenAIProvider",
+   "sublabel": "实现 LLMProvider(ABC)",
+   "tag": "同一个实例",
+   "pos": [
+    820,
+    170
+   ],
+   "size": [
+    190,
+    454
+   ]
+  },
+  {
+   "id": "openai",
+   "type": "cloud",
+   "label": "OpenAI API",
+   "sublabel": "responses.create",
+   "pos": [
+    1110,
+    365
+   ],
+   "size": [
+    130,
+    64
+   ]
+  }
+ ],
+ "boundaries": [],
+ "connections": [
+  {
+   "id": "u-cli",
+   "from": "user",
+   "to": "cli",
+   "label": "uv run",
+   "variant": "emphasis"
+  },
+  {
+   "id": "c1",
+   "from": "cli",
+   "to": "config",
+   "label": "① 读配置"
+  },
+  {
+   "id": "c2",
+   "from": "cli",
+   "to": "registry",
+   "label": "② 建 LLM"
+  },
+  {
+   "id": "c3",
+   "from": "cli",
+   "to": "ingest",
+   "label": "③ 转写",
+   "variant": "emphasis",
+   "route": "straight"
+  },
+  {
+   "id": "c4",
+   "from": "cli",
+   "to": "cleanup",
+   "label": "④ 清理",
+   "variant": "emphasis"
+  },
+  {
+   "id": "c5",
+   "from": "cli",
+   "to": "chat",
+   "label": "⑤ 问答循环",
+   "variant": "emphasis"
+  },
+  {
+   "id": "cf-f",
+   "from": "config",
+   "to": "files",
+   "label": "读/写 JSON"
+  },
+  {
+   "id": "r-p",
+   "from": "registry",
+   "to": "provider",
+   "label": "new（注入 key）"
+  },
+  {
+   "id": "cl-p",
+   "from": "cleanup",
+   "to": "provider",
+   "label": "provider.ask",
+   "fromSide": "right",
+   "toSide": "left"
+  },
+  {
+   "id": "ch-p",
+   "from": "chat",
+   "to": "provider",
+   "label": "provider.chat"
+  },
+  {
+   "id": "p-api",
+   "from": "provider",
+   "to": "openai",
+   "label": "HTTPS",
+   "variant": "security"
+  }
+ ],
+ "cards": [
+  {
+   "dot": "cyan",
+   "title": "怎么读（C# 视角）",
+   "items": [
+    "左边 cli.main() 就是 Program.cs：唯一知道所有具体实现的地方",
+    "中间一列 = 它按编号 ①→⑤ 调用的 5 个“service”，每个只看包的公开 API",
+    "右边 = 真正干活的实现和外部依赖；③ 只在本机跑（ffmpeg 子进程 + Whisper 本地模型），不碰 LLM"
+   ]
+  },
+  {
+   "dot": "emerald",
+   "title": "依赖注入",
+   "items": [
+    "② 造出的 provider 由 cli 传给 ④ 和 ⑤（构造/参数注入，没有 DI 容器）",
+    "cleanup/chat 只认 LLMProvider 抽象，不知道是 OpenAI",
+    "先 ② 后 ③：缺 key 立刻失败，不等 Whisper 跑完"
+   ]
+  },
+  {
+   "dot": "amber",
+   "title": "Python 特有",
+   "items": [
+    "没有 class 的 .py 文件 ≈ C# static class",
+    "包的 __init__.py ≈ assembly 的 public 表面",
+    "图里每个框都是包的公开入口；内部文件见包视图"
+   ]
+  }
+ ]
+}

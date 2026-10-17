@@ -54,7 +54,7 @@ class Transcript(BaseModel):
     def to_markdown(self) -> str:
         # 渲染成 raw.transcript.md：头部元信息 + 每段 "[mm:ss] text"。
         # 带时间戳是为了 LLM 能判断"停顿 → 可能换人"，对推断说话人数量有帮助。
-        md = f"# Transcript\n\n"
+        md = "# Transcript\n\n"
         md += f"- Source: {self.source}\n"
         md += f"- Engine: {self.engine}\n"
         md += f"- Language: {self.language or 'auto-detected'}\n\n"

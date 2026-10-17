@@ -46,7 +46,7 @@ def extract_audio(video: Path, out_dir: Path) -> Path:
         "-ac", "1",
         str(out_path)
     ]
-    import subprocess   # 挪到文件顶部：stdlib 很轻，只有 whisper/torch 这种重量级 import 才需要放在函数里延迟加载
+    import subprocess  # 挪到文件顶部：stdlib 很轻，只有 whisper/torch 这种重量级 import 才需要放在函数里延迟加载
 
     try:
         subprocess.run(cmd, check=True, capture_output=True)

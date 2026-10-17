@@ -7,9 +7,8 @@ from __future__ import annotations
 
 from collections.abc import Callable  # 3.9+ 推荐从这里 import，而不是 typing.Callable
 from pathlib import Path
-from .models import MediaKind
 
-from .models import Transcript
+from .models import MediaKind, Transcript
 from .transcribers import Transcriber
 
 ProgressFn = Callable[[str], None]
@@ -33,8 +32,8 @@ def ingest_file(
     #    建议要：md 给人看，json 给程序重新加载（Transcript.model_validate_json(...)），
     #    这样调试 cleanup/chat 时不用每次重跑几分钟的 Whisper。
     # 5. return transcript
-    from .detect import detect_kind, UnsupportedFileError
     from .audio import extract_audio
+    from .detect import UnsupportedFileError, detect_kind
     from .transcribers import WhisperLocalTranscriber
 
     source = detect_kind(path)

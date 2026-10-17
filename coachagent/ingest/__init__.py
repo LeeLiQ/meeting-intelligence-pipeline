@@ -14,21 +14,21 @@
 `__all__` 声明哪些名字是公开的（也影响 `from x import *`）。
 """
 
-from .models import MediaKind, SourceFile, Transcript, TranscriptSegment
-from .detect import UnsupportedFileError
 from .audio import FfmpegNotFoundError
-from .transcribers import Transcriber, WhisperLocalTranscriber
+from .detect import UnsupportedFileError
+from .models import MediaKind, SourceFile, Transcript, TranscriptSegment
 from .service import ingest_file
+from .transcribers import Transcriber, WhisperLocalTranscriber
 
 __all__ = [
-    "ingest_file",
-    "Transcript",
-    "Transcriber",
-    "UnsupportedFileError",
     "FfmpegNotFoundError",
-    "WhisperLocalTranscriber",
     "MediaKind",
     "SourceFile",
+    "Transcriber",
+    "Transcript",
     "TranscriptSegment",
+    "UnsupportedFileError",
+    "WhisperLocalTranscriber",
+    "ingest_file",
 ]
     
