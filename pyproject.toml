@@ -15,9 +15,65 @@ dependencies = [
 [dependency-groups]
 dev = [
     "import-linter>=2.15",
+    "pyright>=1.1.414",
     "pytest>=9.0.2",
     "ruff>=0.17.1",
 ]
+
+# ---------------------------------------------------------------------------
+# Lint + 格式化（ruff）。运行：uv run ruff check / uv run ruff format
+# ≈ Roslyn analyzers + dotnet format。VS Code 的 Ruff 扩展读同一份配置（保存时自动格式化，见 .vscode/settings.json）。
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py313"
+line-length = 120                    # 默认 88；中文注释多，放宽
+extend-exclude = [
+    "_archive",                      # 旧 pipeline，只读
+    "_scratch",
+    "outputs",                       # 骨架草稿等，不是运行代码
+    # 以下与 [tool.pyright] 的 exclude 保持一致
+    "coachagent/hello.py",
+    "coachagent/transcribe.py",
+    "coachagent/model_providers/client.py",
+]
+
+[tool.ruff.lint]
+select = [
+    "E4", "E7", "E9",   # pycodestyle 中真正的错误（import 位置、一行多语句、语法）
+    "F",                # pyflakes：未定义名、未用 import、__all__ 错误……（"编译错误"那一类）
+    "I",                # import 排序：stdlib → 第三方 → 本项目
+    "B",                # bugbear：可变默认参数、except 里漏 raise from 等常见 bug
+    "UP",               # pyupgrade：提示改用新语法（Optional[X] → X | None 等）
+    "SIM",              # 可简化的写法
+    "RET",              # return 相关：分支漏 return、多余的 else
+]
+# 不开 RUF001–003：会把中文全角标点（，（）：）当成"易混淆字符"报出来，全是噪音。
+
+[tool.ruff.format]
+quote-style = "double"
+
+# pytest 是以 console script 启动的：sys.path[0] 是脚本所在目录，不是 repo 根，
+# 且 tests/ 没有 __init__.py 时 pytest 只把 tests/ 自己加进 sys.path → 找不到 coachagent。
+# pythonpath = ["."] 把 repo 根加进去，效果等同 `python -m coachagent.cli` 时的路径。
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+# ---------------------------------------------------------------------------
+# 类型检查（pyright = Pylance 的引擎）。写在这里，VS Code 和命令行 `uv run pyright` 读同一份配置，结果一致。
+# 注意：这里的设置会覆盖 VS Code 里的 python.analysis.typeCheckingMode。
+# ---------------------------------------------------------------------------
+[tool.pyright]
+include = ["coachagent", "tests"]
+exclude = [
+    "coachagent/hello.py",                   # B1 遗留，待迁移
+    "coachagent/transcribe.py",              # 已拆进 ingest/，待删
+    "coachagent/model_providers/client.py",  # 已被 registry 取代，待删
+]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
 
 # ---------------------------------------------------------------------------
 # 模块边界约束（import-linter）。运行：uv run lint-imports

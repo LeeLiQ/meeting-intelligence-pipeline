@@ -28,10 +28,10 @@ class CredentialStore(Protocol):
 @dataclass(frozen=True)
 class ProviderSpec:
     # 写死在代码里的常量 → dataclass(frozen=True) ≈ C# record；不需要 Pydantic 校验。
-    name: str                       # "openai"
-    api_key_env: str                # "OPENAI_API_KEY"
-    model_env: str                  # "OPENAI_MODEL"
-    default_model: str              # 代码内置兜底
+    name: str  # "openai"
+    api_key_env: str  # "OPENAI_API_KEY"
+    model_env: str  # "OPENAI_MODEL"
+    default_model: str  # 代码内置兜底
     base_url_env: str | None = None
 
 
@@ -40,7 +40,7 @@ class MissingCredentialError(RuntimeError):
         super().__init__(message)
 
 
-PromptFn = Callable[[str], str]   # 给一个提示语，返回用户输入；getpass.getpass 恰好是这个签名
+PromptFn = Callable[[str], str]  # 给一个提示语，返回用户输入；getpass.getpass 恰好是这个签名
 
 
 def resolve_api_key(spec: ProviderSpec, store: CredentialStore, *, prompt: PromptFn | None = None) -> str:
@@ -54,6 +54,7 @@ def resolve_api_key(spec: ProviderSpec, store: CredentialStore, *, prompt: Promp
     #     return key
     # raise MissingCredentialError(f"set {spec.api_key_env} or run interactively")
     import os
+
     if key := os.getenv(spec.api_key_env):
         return key
     if key := store.get(spec.name):
@@ -67,6 +68,7 @@ def resolve_api_key(spec: ProviderSpec, store: CredentialStore, *, prompt: Promp
 def resolve_model(spec: ProviderSpec, configured: str | None, override: str | None = None) -> str:
     # override(--model) > os.getenv(spec.model_env) > configured(settings.json) > spec.default_model
     import os
+
     if override:
         return override
     if env_model := os.getenv(spec.model_env):

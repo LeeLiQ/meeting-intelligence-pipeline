@@ -34,24 +34,15 @@ def extract_audio(video: Path, out_dir: Path) -> Path:
     if not shutil.which("ffmpeg"):
         raise FfmpegNotFoundError()
     # 相当于 mkdir -p：父目录一起建，目录已存在也不报错
-    out_dir.mkdir(parents=True, exist_ok=True)   
+    out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / (video.stem + ".wav")
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-i", str(video),
-        "-vn",
-        "-acodec", "pcm_s16le",
-        "-ar", "16000",
-        "-ac", "1",
-        str(out_path)
-    ]
+    cmd = ["ffmpeg", "-y", "-i", str(video), "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", str(out_path)]
     import subprocess  # 挪到文件顶部：stdlib 很轻，只有 whisper/torch 这种重量级 import 才需要放在函数里延迟加载
 
     try:
         subprocess.run(cmd, check=True, capture_output=True)
     except subprocess.CalledProcessError as e:
-        tail = e.stderr.decode(errors="ignore").strip().splitlines()[-5:]   # ffmpeg 输出很长，真正的报错在最后几行
+        tail = e.stderr.decode(errors="ignore").strip().splitlines()[-5:]  # ffmpeg 输出很长，真正的报错在最后几行
         raise RuntimeError("ffmpeg failed:\n" + "\n".join(tail)) from e
-        
+
     return out_path

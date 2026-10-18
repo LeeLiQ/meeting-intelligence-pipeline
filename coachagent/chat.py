@@ -37,13 +37,14 @@ QA_SYSTEM_PROMPT_TEMPLATE = """\
 
 
 class ChatSession:
-
     def __init__(self, provider: LLMProvider, *, context: str) -> None:
         # self._provider = provider
         # self._messages: list[Message] = [Message(role="system", content=QA_SYSTEM_PROMPT_TEMPLATE.format(transcript=context))]
         # 注意：如果 transcript 里本身有 { } 字符，str.format 会炸——用 .replace("{transcript}", context) 更稳。
         self._provider = provider
-        self._messages: list[Message] = [Message(role="system", content=QA_SYSTEM_PROMPT_TEMPLATE.replace("{transcript}", context))]
+        self._messages: list[Message] = [
+            Message(role="system", content=QA_SYSTEM_PROMPT_TEMPLATE.replace("{transcript}", context))
+        ]
 
     def ask(self, question: str) -> str:
         # 1. append Message(role="user", content=question)
@@ -54,9 +55,9 @@ class ChatSession:
         self._messages.append(Message(role="user", content=question))
         try:
             result = self._provider.chat(self._messages)
-        except BaseException:          # 连 Ctrl+C 中断请求也回滚
+        except BaseException:  # 连 Ctrl+C 中断请求也回滚
             self._messages.pop()
-            raise                      # 原样重抛，类型、traceback 都不变
+            raise  # 原样重抛，类型、traceback 都不变
         self._messages.append(Message(role="assistant", content=result.text))
         return result.text
 

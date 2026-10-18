@@ -52,7 +52,7 @@ class Settings(BaseModel):
     default_provider: str = "openai"
     providers: dict[str, ProviderSettings] = Field(default_factory=dict)
     whisper_model: str = "base"
-    sessions_dir: Path | None = None   # None → <cwd>/coach/sessions
+    sessions_dir: Path | None = None  # None → <cwd>/coach/sessions
 
 
 def load_settings() -> Settings:
@@ -93,10 +93,7 @@ class FileCredentialStore:
 
     def set(self, provider: str, api_key: str) -> None:
         # 读-改-写，原子写同上
-        if self.path.exists():
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-        else:
-            data = {}
+        data = json.loads(self.path.read_text(encoding="utf-8")) if self.path.exists() else {}
         if provider not in data:
             data[provider] = {}
         data[provider]["api_key"] = api_key

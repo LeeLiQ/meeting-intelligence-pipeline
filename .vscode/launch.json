@@ -1,0 +1,50 @@
+{
+    // F5 调试（≈ VS 的 launch profiles）。在左侧 "Run and Debug" 下拉里选配置。
+    // 断点直接在 coachagent/ 任意文件行号左侧点。
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "coachagent: cli（媒体文件）",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "coachagent.cli",           // ≈ python -m coachagent.cli
+            "args": ["${input:mediaPath}"],
+            "cwd": "${workspaceFolder}",           // 相对路径 coach/sessions 以 repo 根为准
+            "console": "integratedTerminal",       // 必须：input() / getpass 需要真实终端，Debug Console 不行
+            "justMyCode": true
+        },
+        {
+            "name": "coachagent: cli --from-json（跳过 Whisper）",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "coachagent.cli",
+            "args": ["--from-json", "${input:jsonPath}"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "pytest: 当前文件",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": ["-q", "${file}"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+    ],
+    "inputs": [
+        {
+            "id": "mediaPath",
+            "type": "promptString",
+            "description": "音/视频文件完整路径（不要带引号）"
+        },
+        {
+            "id": "jsonPath",
+            "type": "promptString",
+            "description": "raw.transcript.json 路径",
+            "default": "coach/sessions/_test/raw.transcript.json"
+        }
+    ]
+}

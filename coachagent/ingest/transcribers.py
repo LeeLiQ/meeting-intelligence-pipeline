@@ -28,7 +28,12 @@ class Transcriber(Protocol):
     # ≈ C# interface ITranscriber。Protocol 是 structural typing：
     # 任何类只要有同签名的 transcribe()，就"自动实现"了它，无需继承。
     # 类型检查器（Pylance/mypy）会在你传错对象时报错，运行时不检查。
-    name: str
+    #
+    # name 声明成只读 property 而不是 `name: str`：
+    #   `name: str` 在 Protocol 里表示"可读写属性"，而 WhisperLocalTranscriber 用 @property 实现（只读）→ pyright 判不兼容。
+    #   Protocol 里写 property = 只要求"能读"，实现方用普通属性或 property 都满足。
+    @property
+    def name(self) -> str: ...
 
     def transcribe(self, audio: Path) -> Transcript: ...
 
@@ -56,6 +61,7 @@ class WhisperLocalTranscriber:
         #       （whisper 的 segment 还有 tokens/avg_logprob 等，我们不要）
         # 4. return Transcript(source=audio, engine=self.name, language=..., segments=...)
         import whisper
+
         if self._model is None:
             self._model = whisper.load_model(self._model_name)
         try:
@@ -64,10 +70,18 @@ class WhisperLocalTranscriber:
             raise RuntimeError(f"Failed to transcribe audio {audio}") from e
 
         from .models import TranscriptSegment
+
         segments = [TranscriptSegment.model_validate(seg) for seg in result["segments"]]
+
+        # whisper 的 transcribe() 返回类型标得很宽（value 是 str | list），pyright 不知道 "language" 一定是 str。
+        # 在第三方库的边界用 isinstance 做运行时收窄（narrowing）：既让类型检查器满意，也防住真出现异常值。
+        # 不用 typing.cast：cast 只是"告诉检查器相信我"，运行时什么都不检查。
+        lang = result.get("language")
+        language = lang if isinstance(lang, str) else None
+
         return Transcript(
             source=audio,
             engine=self.name,
-            language=result.get("language"),
-            segments=segments
+            language=language,
+            segments=segments,
         )

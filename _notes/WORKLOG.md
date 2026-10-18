@@ -144,3 +144,26 @@
 - Qian 自加第 4 条契约 "Only model_providers may talk to LLM SDKs" → BROKEN：forbidden 契约默认检查**传递依赖**（cli→model_providers→openai_provider→openai）。意图是只禁直接 import → 需 `allow_indirect_imports = true`。
 - 剩余（非阻塞首跑）：cli 直接改写 args.source / settings.sessions_dir（建议局部变量）；--from-json、--whisper-model 未接通；外层异常边界、Q6 check-ignore、默认 settings.json、EOFError 未做；openai_provider 仍显式传 temperature=None（若 OPENAI_MODEL 为 reasoning 模型，cleanup 的 0.1 会被拒 → 首跑最可能的失败点）。
 - 2026-10-17：Claude 代改 cli.py 两处：args.source/settings.sessions_dir 改为局部变量 source/sessions_root；REPL 复合语句拆行。ruff 通过。
+
+## 2026-10-17（续）— 包内/包外、pyright 实测、Python 补习清单
+- sandbox 装 pyright 1.1.390（standard, py3.13）对当前代码与"注入历史错误"的副本实测：standard 能抓到 session_dir、漏参数、隐式 None、未导出名、__all__ 拼写、找不到模块；**唯一漏网**：裸名 `from config import`（pyright 按导入文件所在目录解析，同目录恰有 config.py）。→ Qian 的 VS Code 未显示这些，判断是环境/配置问题（interpreter、diagnosticMode=openFilesOnly、语言服务器），给了检查清单。
+- pyright 在现有代码发现 2 个真实类型问题（运行不炸）：Transcriber Protocol `name: str` vs 实现 `@property`（连带 service.py 2 条）；openai_provider `input` 类型 list[dict] vs ResponseInputParam。两种修法均在副本中验证 0 error。未改 Qian 代码。
+- 产出 `outputs/learning/python-gaps-2026-10-17.md`：P1 import 系统、P2 异常、P3 作用域/无编译期、P4 签名与缺省语义、P5 可变性、P6 类型（Protocol/narrowing/invariance/TypedDict/TYPE_CHECKING），附工具能力对照表。
+- 建议（未执行）：`[tool.pyright]` 写进 pyproject 让 IDE 与 CLI 一致；`uv add --dev pyright`；加 import smoke test。
+
+## 2026-10-17（续）— 代改：类型问题 + pyright 配置 + 冒烟测试
+- `ingest/transcribers.py`：Transcriber Protocol 的 `name` 改为只读 `@property`。
+- `model_providers/openai_provider.py`：`TYPE_CHECKING` 下导入 `ResponseInputParam`，`user_and_assistant` 显式标注并改为 `{"role","content"}` dict。
+- `pyproject.toml`：新增 `[tool.pyright]`（standard、py3.13、.venv、排除 hello/transcribe/client 三个遗留文件）。备份在 `_scratch/`。Qian 已自加 `allow_indirect_imports`、dev 依赖 import-linter/ruff。
+- 新增 `tests/test_smoke.py`：逐个 import 6 个模块 + 校验 `__all__` 名字都存在（补 pyright 裸名盲区）。
+- ruff `--select I --fix` 整理了 cli.py、model_providers/__init__.py 的 import 顺序（I001）。
+- 验证（sandbox 副本）：pyright 0 error（仅剩 whisper/pytest 未装的环境噪音）；ruff 通过（EXE002 为 Linux 挂载权限假象，Windows 不适用）；import-linter 4/4 kept。smoke test 未能在 sandbox 跑（无 py3.13）。
+- 待 Qian：`uv add --dev pyright`，然后 `uv run pyright`、`uv run pytest -q`。
+- 2026-10-17：本机 pyright 报 transcribers.py:76（whisper 返回 dict 值类型 str|list，sandbox 未装 whisper 故未发现）。改为 isinstance 收窄 language。
+- 2026-10-17：pytest 7 failed = ModuleNotFoundError coachagent（pytest 不把 repo 根加入 sys.path）。pyproject 加 [tool.pytest.ini_options] pythonpath=["."]、testpaths；sandbox 复现并验证路径问题消失。
+- 2026-10-17：产出 outputs/learning/python-toolchain-for-dotnet.md（.NET→Python 工具链对照，标注 repo 现状）。缺口：.vscode 设置/launch.json、[tool.ruff] 规则集+format、pre-commit、pytest-cov、CI——未执行，待 Qian 决定。
+
+## 2026-10-17（续）— 脚手架补齐
+- pyproject：新增 `[tool.ruff]`（py313、line-length 120、排除 _archive/_scratch/outputs 与 3 个遗留文件；lint select E4/E7/E9/F/I/B/UP/SIM/RET；不开 RUF001–003 因中文全角标点噪音）+ `[tool.ruff.format]`。备份在 _scratch/。
+- 一次性 `ruff format`：14 个文件、约 75 行（空格/尾逗号），语法校验通过、import-linter 4/4 kept。剩 1 条 lint：config.py:96 SIM108（留给 Qian 练三元表达式）。
+- `.vscode/` 在本会话是受保护路径，写不进去 → settings.json / extensions.json / launch.json 放在 `_scratch/vscode/`，待 Qian 复制。settings 内 `python.terminal.useEnvFile: false` 了结 09-06 待决项（选 B：只由 load_dotenv 加载），也使 10-12 的 auth.json loose end 可测。

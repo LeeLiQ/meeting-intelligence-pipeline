@@ -38,8 +38,8 @@ class TranscriptSegment(BaseModel):
 
 class Transcript(BaseModel):
     source: Path
-    engine: str                      # 例如 "whisper-local:base"，便于日后对比不同 Transcriber
-    language: str | None = None      # Whisper 会自动检测语言，结果在返回 dict 的 "language"
+    engine: str  # 例如 "whisper-local:base"，便于日后对比不同 Transcriber
+    language: str | None = None  # Whisper 会自动检测语言，结果在返回 dict 的 "language"
     segments: list[TranscriptSegment] = Field(default_factory=list)
     # Field(default_factory=list)：可变默认值的正确写法（和 dataclass 一样，不能直接写 = []）
 

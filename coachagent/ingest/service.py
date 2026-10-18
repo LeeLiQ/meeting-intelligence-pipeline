@@ -17,9 +17,9 @@ ProgressFn = Callable[[str], None]
 
 def ingest_file(
     path: Path,
-    *,                                   # 之后的参数只能用关键字传（≈ C# named args 强制化）
-    work_dir: Path,                      # 中间文件（wav）和产出写到哪里
-    transcriber: Transcriber | None = None,   # 依赖注入：不传就用 WhisperLocalTranscriber()
+    *,  # 之后的参数只能用关键字传（≈ C# named args 强制化）
+    work_dir: Path,  # 中间文件（wav）和产出写到哪里
+    transcriber: Transcriber | None = None,  # 依赖注入：不传就用 WhisperLocalTranscriber()
     on_progress: ProgressFn = lambda msg: None,  # 默认什么都不做；CLI 传 print，UI 传进度条更新
 ) -> Transcript:
     # 1. source = detect_kind(path)                         on_progress("detected: video")

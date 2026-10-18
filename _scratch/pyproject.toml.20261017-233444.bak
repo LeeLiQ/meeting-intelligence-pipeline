@@ -1,0 +1,83 @@
+[project]
+name = "meeting-intelligence-pipeline"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "google-generativeai>=0.8.6",
+    "openai>=2.28.0",
+    "openai-whisper>=20250625",
+    "pydantic>=2.12.5",
+    "python-dotenv>=1.2.2",
+]
+
+[dependency-groups]
+dev = [
+    "import-linter>=2.15",
+    "pyright>=1.1.414",
+    "pytest>=9.0.2",
+    "ruff>=0.17.1",
+]
+
+# pytest 是以 console script 启动的：sys.path[0] 是脚本所在目录，不是 repo 根，
+# 且 tests/ 没有 __init__.py 时 pytest 只把 tests/ 自己加进 sys.path → 找不到 coachagent。
+# pythonpath = ["."] 把 repo 根加进去，效果等同 `python -m coachagent.cli` 时的路径。
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+# ---------------------------------------------------------------------------
+# 类型检查（pyright = Pylance 的引擎）。写在这里，VS Code 和命令行 `uv run pyright` 读同一份配置，结果一致。
+# 注意：这里的设置会覆盖 VS Code 里的 python.analysis.typeCheckingMode。
+# ---------------------------------------------------------------------------
+[tool.pyright]
+include = ["coachagent", "tests"]
+exclude = [
+    "coachagent/hello.py",                   # B1 遗留，待迁移
+    "coachagent/transcribe.py",              # 已拆进 ingest/，待删
+    "coachagent/model_providers/client.py",  # 已被 registry 取代，待删
+]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
+
+# ---------------------------------------------------------------------------
+# 模块边界约束（import-linter）。运行：uv run lint-imports
+# Python 没有 C# 的 project reference，谁都能 import 谁；这里把 r2 的依赖规则写成可检查的契约。
+# 违反任何一条 → lint-imports 非 0 退出，并打印具体是哪一行 import 违规。
+# 函数内部的 lazy import 也会被检查（它解析源码，不看运行时）。
+# ---------------------------------------------------------------------------
+[tool.importlinter]
+root_package = "coachagent"
+include_external_packages = true   # 让下面 forbidden 契约能约束 openai / whisper 这些第三方包
+
+[[tool.importlinter.contracts]]
+name = "Layers: cli > app (cleanup|chat) > leaf modules (ingest|model_providers|config)"
+type = "layers"
+# 上层可以 import 下层，反之不行；同一层里用 | 分隔的模块互相独立（互不 import）。
+layers = [
+    "coachagent.cli",
+    "coachagent.cleanup | coachagent.chat",
+    "coachagent.ingest | coachagent.model_providers | coachagent.config",
+]
+
+[[tool.importlinter.contracts]]
+name = "ingest stays AI-provider agnostic (no LLM SDKs)"
+type = "forbidden"
+source_modules = ["coachagent.ingest"]
+forbidden_modules = ["openai", "google"]
+
+[[tool.importlinter.contracts]]
+name = "model_providers knows nothing about audio/ASR"
+type = "forbidden"
+source_modules = ["coachagent.model_providers"]
+forbidden_modules = ["whisper"]
+
+[[tool.importlinter.contracts]]
+name = "Only model_providers may talk to LLM SDKs"
+type = "forbidden"
+source_modules = ["coachagent.cli", "coachagent.cleanup", "coachagent.chat", "coachagent.config"]
+forbidden_modules = ["openai", "google"]
+allow_indirect_imports = true

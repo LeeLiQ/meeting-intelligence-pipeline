@@ -18,15 +18,16 @@ from __future__ import annotations
 
 import argparse
 import datetime
-from pathlib import Path
-from dotenv import load_dotenv
 from getpass import getpass
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 from coachagent.chat import ChatSession
-from coachagent.config import ProviderSettings, FileCredentialStore, load_settings
-from coachagent.model_providers import ProviderError, create_provider
 from coachagent.cleanup import clean_transcript
+from coachagent.config import FileCredentialStore, ProviderSettings, load_settings
 from coachagent.ingest import ingest_file
+from coachagent.model_providers import ProviderError, create_provider
 
 
 def _make_session_dir(source: Path, sessions_root: Path) -> Path:
@@ -109,7 +110,8 @@ def main() -> None:
     provider = create_provider(
         name,
         store=FileCredentialStore(),
-        configured_model=ps.model, configured_base_url=ps.base_url,
+        configured_model=ps.model,
+        configured_base_url=ps.base_url,
         model_override=args.model,
         prompt=getpass,
     )

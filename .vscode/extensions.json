@@ -1,0 +1,18 @@
+{
+    // 打开本 repo 时 VS Code 会提示安装这些扩展。
+    "recommendations": [
+        "ms-python.python",              // Python 基础支持（解释器选择、运行、测试面板）
+        "ms-python.vscode-pylance",      // 实时类型检查（引擎 = pyright）≈ Roslyn 的红线
+        "ms-python.debugpy",             // 调试器，F5 用（≈ VS 调试器）
+        "charliermarsh.ruff",            // lint + 格式化 ≈ analyzers + dotnet format
+        "tamasfe.even-better-toml",      // pyproject.toml 语法高亮与校验
+        "bierner.markdown-mermaid"       // 渲染 outputs/architecture/ARCHITECTURE.md 里的图
+    ],
+    // ruff 已经覆盖这些功能，装了会和 ruff 抢着格式化
+    "unwantedRecommendations": [
+        "ms-python.black-formatter",
+        "ms-python.isort",
+        "ms-python.flake8",
+        "ms-python.pylint"
+    ]
+}

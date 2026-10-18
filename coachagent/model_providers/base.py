@@ -47,8 +47,8 @@ class ProviderError(RuntimeError):
 class LLMProvider(ABC):
     # ≈ C# abstract class。子类必须实现所有 @abstractmethod，否则实例化时就抛 TypeError。
 
-    name: str            # "openai"
-    model: str           # 当前选定的模型，如 "gpt-4.1-mini"；从 env OPENAI_MODEL 读
+    name: str  # "openai"
+    model: str  # 当前选定的模型，如 "gpt-4.1-mini"；从 env OPENAI_MODEL 读
 
     @abstractmethod
     def chat(self, messages: list[Message], *, temperature: float | None = None) -> ChatResult:

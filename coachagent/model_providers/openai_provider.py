@@ -20,11 +20,16 @@ lib: `openai` v2.x → `from openai import OpenAI`
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from .base import ChatResult, LLMProvider, Message
 
+if TYPE_CHECKING:
+    # 只给类型检查器看，运行时不执行 → 不破坏"选中 openai 才加载 SDK"的 lazy import
+    from openai.types.responses import ResponseInputParam
 
-class OpenAIProvider(LLMProvider):   # 显式继承 ABC
 
+class OpenAIProvider(LLMProvider):  # 显式继承 ABC
     name = "openai"
 
     def __init__(self, *, api_key: str, model: str, base_url: str | None = None) -> None:
@@ -32,6 +37,7 @@ class OpenAIProvider(LLMProvider):   # 显式继承 ABC
         # 好处：测试时直接传假 key 构造，不依赖环境。
         # self._client = OpenAI(api_key=api_key, base_url=base_url)
         from openai import OpenAI
+
         self._client = OpenAI(api_key=api_key, base_url=base_url)
         self.model = model
 
@@ -44,8 +50,13 @@ class OpenAIProvider(LLMProvider):   # 显式继承 ABC
         #    `raise X from e` 保留原始异常链，traceback 里能看到根因（≈ C# InnerException）
         # 3. return ChatResult(text=resp.output_text, model=self.model, usage=Usage(...))
         from openai import APIError
+
         system_messages = [m.content for m in messages if m.role == "system"]
-        user_and_assistant = [m.model_dump() for m in messages if m.role != "system"]
+        # 显式标注为 SDK 的参数类型：model_dump() 推断出的是 list[dict[str, Any]]，
+        # 而 SDK 要的是 TypedDict 列表（list 是 invariant，dict 不能当成 TypedDict 传）。
+        user_and_assistant: ResponseInputParam = [
+            {"role": m.role, "content": m.content} for m in messages if m.role != "system"
+        ]
         instructions = "\n".join(system_messages)
         try:
             resp = self._client.responses.create(
@@ -56,8 +67,10 @@ class OpenAIProvider(LLMProvider):   # 显式继承 ABC
             )
         except APIError as e:
             from .base import ProviderError
+
             raise ProviderError(str(e)) from e
         from .base import Usage
+
         return ChatResult(
             text=resp.output_text,
             model=self.model,

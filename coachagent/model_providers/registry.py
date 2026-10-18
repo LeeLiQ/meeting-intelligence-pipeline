@@ -19,13 +19,17 @@ def _build_openai(*, api_key: str, model: str, base_url: str | None) -> LLMProvi
     # from .openai_provider import OpenAIProvider   ← lazy import：只有选中 openai 才加载 openai SDK
     # return OpenAIProvider(api_key=api_key, model=model, base_url=base_url)
     from .openai_provider import OpenAIProvider
+
     return OpenAIProvider(api_key=api_key, model=model, base_url=base_url)
 
 
 _REGISTRY: dict[str, tuple[ProviderSpec, Callable[..., LLMProvider]]] = {
-    "openai": (ProviderSpec("openai", "OPENAI_API_KEY", "OPENAI_MODEL",
-                            default_model="gpt-4.1-mini", base_url_env="OPENAI_BASE_URL"),
-               _build_openai),
+    "openai": (
+        ProviderSpec(
+            "openai", "OPENAI_API_KEY", "OPENAI_MODEL", default_model="gpt-4.1-mini", base_url_env="OPENAI_BASE_URL"
+        ),
+        _build_openai,
+    ),
     # 加 Gemini：写 gemini_provider.py + 这里一行。其他代码零改动。
     #   注意 pyproject 里的 `google-generativeai` 已 deprecated，新 SDK 是 `google-genai`（from google import genai）
 }
@@ -39,10 +43,10 @@ def create_provider(
     name: str,
     *,
     store: CredentialStore,
-    configured_model: str | None = None,     # 来自 settings.json，由 cli 取出后传入
+    configured_model: str | None = None,  # 来自 settings.json，由 cli 取出后传入
     configured_base_url: str | None = None,
-    model_override: str | None = None,       # --model
-    prompt: PromptFn | None = None,          # 见 credentials.resolve_api_key
+    model_override: str | None = None,  # --model
+    prompt: PromptFn | None = None,  # 见 credentials.resolve_api_key
 ) -> LLMProvider:
     # 决定：只传值，不传 Settings 对象 —— model_providers 完全不知道配置文件存在，
     # 依赖方向保持 cli → {config, model_providers}，两者互不 import。
@@ -56,6 +60,7 @@ def create_provider(
     import os
 
     from .credentials import resolve_api_key, resolve_model
+
     if name not in _REGISTRY:
         raise ValueError(f"Unknown provider {name!r}, available: {available_providers()}")
     spec, builder = _REGISTRY[name]

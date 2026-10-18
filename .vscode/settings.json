@@ -1,0 +1,42 @@
+{
+    // 工作区设置：进 git，换机器打开即一致（≈ 把 VS 的 solution 设置提交进 repo）。
+    // 类型检查级别、ruff 规则不在这里设 —— 它们在 pyproject.toml，编辑器和命令行共用一份。
+
+    // ---- 解释器：固定用项目的 .venv（Pylance 找不到包、不报错，多半是选错了解释器）----
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+
+    // ---- Pylance：检查整个工作区，而不只是打开的文件（默认 openFilesOnly）----
+    "python.analysis.diagnosticMode": "workspace",
+    "python.analysis.autoImportCompletions": true,
+
+    // ---- .env：只由代码里的 load_dotenv() 加载，终端不自动注入 ----
+    // 理由：自动注入会让 OPENAI_API_KEY 永远存在，测不到 auth.json 的写回分支（WORKLOG 2026-10-12 loose end），
+    // 而且"在终端能跑、在别处不能跑"的差异很难查。（顺带了结 2026-09-06 的 useEnvFile 待决项：选 B）
+    "python.terminal.useEnvFile": false,
+
+    // ---- 测试：VS Code Testing 面板（≈ Test Explorer）用 pytest ----
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestArgs": ["tests"],
+
+    // ---- 保存时：ruff 格式化 + 整理 import（≈ VS 的 Format on Save + Remove and Sort Usings）----
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports.ruff": "explicit",
+            "source.fixAll.ruff": "explicit"
+        },
+        "editor.rulers": [120]
+    },
+
+    // ---- 编码：Windows 下统一 UTF-8，避免中文乱码 ----
+    "files.encoding": "utf8",
+
+    // ---- 隐藏工具生成的缓存目录 ----
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/.pytest_cache": true,
+        "**/.ruff_cache": true
+    }
+}
