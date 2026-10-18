@@ -50,3 +50,10 @@ name = "model_providers knows nothing about audio/ASR"
 type = "forbidden"
 source_modules = ["coachagent.model_providers"]
 forbidden_modules = ["whisper"]
+
+[[tool.importlinter.contracts]]
+name = "Only model_providers may talk to LLM SDKs"
+type = "forbidden"
+source_modules = ["coachagent.cli", "coachagent.cleanup", "coachagent.chat", "coachagent.config"]
+forbidden_modules = ["openai", "google"]
+allow_indirect_imports = true

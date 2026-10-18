@@ -12,12 +12,13 @@
 
 from .base import ChatResult, LLMProvider, Message, ProviderError
 from .registry import available_providers, create_provider
+from .credentials import MissingCredentialError
 
 __all__ = [
     "ChatResult",
     "LLMProvider",
     "Message",
-    "MissingCredentialsError",
+    "MissingCredentialError",
     "ProviderError",
     "available_providers",
     "create_provider"

@@ -131,3 +131,16 @@
 - 产出 `outputs/architecture/`：`01-overview.html`（cli.main ≈ Program.cs，①→⑤ 调用顺序 + DI）、`02-packages.html`（包 ≈ csproj，__init__ ≈ public 表面，Protocol 虚线）、`03-runtime.html`（时序）；JSON 源在 `src/`；ARCHITECTURE.md 改为阅读顺序 + C# 映射表。旧版备份 `_scratch/ARCHITECTURE.md.20261016-150043.bak`。
 - 布局取舍：01 图把 ffmpeg/Whisper 并进 ingest_file 的 sublabel（否则 ②③ 行序要颠倒才能不交叉）。
 - 未决：Qian 本机若要自己改图需 `npx skills add tt-a1i/archify -g`（Claude Code）；B3 加 tools/ 时同步更新 src/01-overview。
+
+## 2026-10-17 — Step 4 修复复查
+- chat.py 已改为 `except BaseException: pop(); raise` ✅；config.py ValidationError 已修 ✅；import-linter 3/3 kept。
+- ruff 仅剩 session_dir（F821 ×3），但 cli.py 23–27 行 import 指向不存在的模块（`config`/`credentials`/`registry` 裸模块名、`getpass` 来自 stdlib、`load_dotenv` 来自 dotenv、`ProviderError` 经 chat 导入）→ 运行时 ModuleNotFoundError/ImportError。ruff 不做 import 解析，import-linter 只看 coachagent.* 内部，两者都盲区。sandbox 网络不通，未能实跑验证，由静态核对确认。
+- 未改：cleanup.py 仍 import BadRequestError；model_providers `__all__` 仍 `MissingCredentialsError` 且未 import；cli 外层异常边界被整体删除（非阻塞）。
+- 讲解 session_dir：main() 局部变量；Python 无块作用域（if/else 内赋值、块外可用）。
+- 未改 review 文档（Qian 要求）。
+
+## 2026-10-17（续）— 复查 #2
+- ruff：All checks passed。cli import 全部改正；cleanup.py 精简为一行调用；model_providers 导出 MissingCredentialError ✅。session_dir 已定义。
+- Qian 自加第 4 条契约 "Only model_providers may talk to LLM SDKs" → BROKEN：forbidden 契约默认检查**传递依赖**（cli→model_providers→openai_provider→openai）。意图是只禁直接 import → 需 `allow_indirect_imports = true`。
+- 剩余（非阻塞首跑）：cli 直接改写 args.source / settings.sessions_dir（建议局部变量）；--from-json、--whisper-model 未接通；外层异常边界、Q6 check-ignore、默认 settings.json、EOFError 未做；openai_provider 仍显式传 temperature=None（若 OPENAI_MODEL 为 reasoning 模型，cleanup 的 0.1 会被拒 → 首跑最可能的失败点）。
+- 2026-10-17：Claude 代改 cli.py 两处：args.source/settings.sessions_dir 改为局部变量 source/sessions_root；REPL 复合语句拆行。ruff 通过。

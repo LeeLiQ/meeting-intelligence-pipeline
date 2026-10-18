@@ -19,12 +19,12 @@ from __future__ import annotations
 import argparse
 import datetime
 from pathlib import Path
+from dotenv import load_dotenv
+from getpass import getpass
 
-from config import ProviderSettings, load_dotenv, load_settings
-from credentials import getpass
-from registry import FileCredentialStore, create_provider
-
-from coachagent.chat import ChatSession, ProviderError
+from coachagent.chat import ChatSession
+from coachagent.config import ProviderSettings, FileCredentialStore, load_settings
+from coachagent.model_providers import ProviderError, create_provider
 from coachagent.cleanup import clean_transcript
 from coachagent.ingest import ingest_file
 
@@ -115,7 +115,14 @@ def main() -> None:
     )
     print(f"provider: {provider.name} / {provider.model}")
 
-    transcript = ingest_file(args.source, work_dir=session_dir, on_progress=print)
+    # 用局部变量承接"解析后的值"，不回写 args / settings：
+    # 它们代表"用户输入"和"配置文件内容"，改写后若被 save_settings() 持久化，默认值就会悄悄进配置文件。
+    source = args.source or _read_path_interactively()
+    sessions_root = settings.sessions_dir or Path("coach/sessions")
+
+    session_dir = _make_session_dir(source, sessions_root)
+
+    transcript = ingest_file(source, work_dir=session_dir, on_progress=print)
 
     cleaned = clean_transcript(transcript, provider)
     (session_dir / "cleaned.md").write_text(cleaned, encoding="utf-8")
@@ -124,9 +131,12 @@ def main() -> None:
     session = ChatSession(provider, context=cleaned)
     while True:
         q = input("问> ").strip()
-        if q in {"", "exit", "quit"}: break
-        try: print(session.ask(q))
-        except ProviderError as e: print(f"[error] {e}")
+        if q in {"", "exit", "quit"}:
+            break
+        try:
+            print(session.ask(q))
+        except ProviderError as e:
+            print(f"[error] {e}")
 
 
 if __name__ == "__main__":

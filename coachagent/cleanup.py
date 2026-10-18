@@ -9,7 +9,7 @@ lib: 只依赖 coachagent.model_providers 和 coachagent.ingest 的公开 API。
 from __future__ import annotations
 
 from coachagent.ingest import Transcript
-from coachagent.model_providers import BadRequestError, LLMProvider
+from coachagent.model_providers import LLMProvider
 
 CLEANUP_SYSTEM_PROMPT = """\
     你是会议记录整理员。输入是 ASR 自动转写稿，带 [mm:ss] 时间戳，可能有同音错字、无标点、口头禅。
@@ -42,11 +42,5 @@ def clean_transcript(transcript: Transcript, provider: LLMProvider) -> str:
     #    或者更简单：temperature=None 时不传。r2 选后者，遇到再说。
     #
     # 已确认不做（Q3）：chunking。一次调用。
-    try:
-        text = transcript.to_markdown()
-        return provider.ask(text, system=CLEANUP_SYSTEM_PROMPT, temperature=0.1)
-    except BadRequestError as e:
-        if "temperature" in str(e):
-            return provider.ask(text, system=CLEANUP_SYSTEM_PROMPT)
-    except Exception as e:
-        raise RuntimeError(f"Failed to clean transcript: {e}") from e
+    text = transcript.to_markdown()
+    return provider.ask(text, system=CLEANUP_SYSTEM_PROMPT, temperature=0.1)
