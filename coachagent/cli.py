@@ -18,16 +18,67 @@ from __future__ import annotations
 
 import argparse
 import datetime
-from getpass import getpass
+import getpass
+import subprocess
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 from coachagent.chat import ChatSession
 from coachagent.cleanup import clean_transcript
-from coachagent.config import FileCredentialStore, ProviderSettings, load_settings
-from coachagent.ingest import ingest_file
-from coachagent.model_providers import ProviderError, create_provider
+from coachagent.config import (
+    SETTINGS_FILE,
+    FileCredentialStore,
+    ProviderSettings,
+    Settings,
+    load_settings,
+    save_settings,
+)
+from coachagent.ingest import (
+    FfmpegNotFoundError,
+    Transcript,
+    UnsupportedFileError,
+    WhisperLocalTranscriber,
+    ingest_file,
+)
+from coachagent.model_providers import MissingCredentialError, ProviderError, create_provider
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="coachagent",
+        description="Transcribe a meeting recording, clean it with an LLM, then ask questions about it.",
+    )
+    src = p.add_mutually_exclusive_group()  # 二选一：要么给媒体文件，要么给已有 json
+    src.add_argument("source", nargs="?", type=Path, help="audio/video file (prompted if omitted)")
+    src.add_argument("--from-json", type=Path, metavar="JSON", help="reuse a raw.transcript.json, skip Whisper")
+    p.add_argument("--provider", default=None, help="LLM provider (default: settings.json)")
+    p.add_argument("--model", help="override model name")
+    p.add_argument("--whisper-model", help="tiny/base/small/medium (default: settings.json)")
+    return p
+
+
+def _ensure_ignored(path: Path) -> None:
+    """Q6 guardrail：产出目录若在 git repo 内却没被 ignore，拒绝继续。"""
+    r = subprocess.run(["git", "check-ignore", "-q", str(path)], capture_output=True)  # noqa: F821
+    # returncode: 0 = 被 ignore ✓ ；1 = 在 repo 内但没被 ignore ✗ ；128 = 不在 git repo（放行）
+    if r.returncode == 1:
+        raise RuntimeError(f"refusing to write meeting data to non-git-ignored path: {path}")
+
+
+def _build_provider(args, settings):
+    name = args.provider or settings.default_provider
+    ps = settings.providers.get(name, ProviderSettings())
+    provider = create_provider(
+        name,
+        store=FileCredentialStore(),
+        configured_model=ps.model,
+        configured_base_url=ps.base_url,
+        model_override=args.model,
+        prompt=getpass,
+    )
+    return provider
 
 
 def _make_session_dir(source: Path, sessions_root: Path) -> Path:
@@ -37,7 +88,10 @@ def _make_session_dir(source: Path, sessions_root: Path) -> Path:
     #   不在 git repo 里（returncode 128）→ 放行。一行代码换一道硬保险，值得。
     # datetime.date.today().isoformat()
     # mkdir(parents=True, exist_ok=True)
-    session_dir = sessions_root / f"{datetime.date.today().isoformat()}-{source.stem}"
+    import re
+
+    slug = re.sub(r"[^\w-]+", "_", source.stem)  # "2026-10-09 11-03-54-bevalc" → "2026-10-09_11-03-54-bevalc"
+    session_dir = sessions_root / f"{datetime.date.today().isoformat()}-{slug}"
     session_dir.mkdir(parents=True, exist_ok=True)
     return session_dir
 
@@ -49,7 +103,7 @@ def _read_path_interactively() -> Path:
     return Path(raw)
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> int:
     # --- 参数 ---
     # parser.add_argument("source", nargs="?", type=Path)        nargs="?" → 可选的位置参数
     # parser.add_argument("--provider", default=None)            None → settings.default_provider
@@ -95,51 +149,55 @@ def main() -> None:
     # 最外层 catch: UnsupportedFileError / FileNotFoundError / FfmpegNotFoundError / MissingCredentialError
     #   → 打印友好提示，sys.exit(1)；其他异常让它带 traceback 炸出来（开发期要看到）
     # KeyboardInterrupt（Ctrl+C）→ 安静退出
-    parser = argparse.ArgumentParser()
-    parser.add_argument("source", nargs="?", type=Path)
-    parser.add_argument("--provider", default=None)
-    parser.add_argument("--model", default=None)
-    parser.add_argument("--whisper-model", default=None)
-    parser.add_argument("--from-json", type=Path)
-    args = parser.parse_args()
+    args = _build_parser().parse_args(argv)
+    try:
+        load_dotenv()
+        settings = load_settings()
+        if not SETTINGS_FILE.exists():
+            save_settings(Settings())
+            print(f"wrote default settings: {SETTINGS_FILE}")
 
-    load_dotenv()
-    settings = load_settings()
-    name = args.provider or settings.default_provider
-    ps = settings.providers.get(name, ProviderSettings())
-    provider = create_provider(
-        name,
-        store=FileCredentialStore(),
-        configured_model=ps.model,
-        configured_base_url=ps.base_url,
-        model_override=args.model,
-        prompt=getpass,
-    )
-    print(f"provider: {provider.name} / {provider.model}")
+        provider = _build_provider(args, settings)
+        print(f"provider: {provider.name} / {provider.model}")
 
-    # 用局部变量承接"解析后的值"，不回写 args / settings：
-    # 它们代表"用户输入"和"配置文件内容"，改写后若被 save_settings() 持久化，默认值就会悄悄进配置文件。
-    source = args.source or _read_path_interactively()
-    sessions_root = settings.sessions_dir or Path("coach/sessions")
+        if args.from_json:
+            transcript = Transcript.model_validate_json(args.from_json.read_text(encoding="utf-8"))
+            session_dir = args.from_json.parent
+        else:
+            path = args.source or _read_path_interactively()
+            session_dir = _make_session_dir(path, settings.sessions_dir or Path("coach/sessions"))
+            _ensure_ignored(session_dir)
+            transcriber = WhisperLocalTranscriber(args.whisper_model or settings.whisper_model)
+            transcript = ingest_file(path, work_dir=session_dir, transcriber=transcriber, on_progress=print)
 
-    session_dir = _make_session_dir(source, sessions_root)
+        cleaned = clean_transcript(transcript, provider)
+        (session_dir / "cleaned.md").write_text(cleaned, encoding="utf-8")
+        print(f"✓ transcript: {session_dir}")
 
-    transcript = ingest_file(source, work_dir=session_dir, on_progress=print)
+        _repl(ChatSession(provider, context=cleaned))
+        return 0
 
-    cleaned = clean_transcript(transcript, provider)
-    (session_dir / "cleaned.md").write_text(cleaned, encoding="utf-8")
-    print(f"✓ transcript: {session_dir}")
+    except (UnsupportedFileError, FileNotFoundError, FfmpegNotFoundError, MissingCredentialError, ProviderError) as e:
+        print(f"[error] {e}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("\nbye")
+        return 130
 
-    session = ChatSession(provider, context=cleaned)
+
+def _repl(session: ChatSession) -> None:
     while True:
-        q = input("问> ").strip()
+        try:
+            q = input("问> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            break
         if q in {"", "exit", "quit"}:
             break
         try:
             print(session.ask(q))
         except ProviderError as e:
-            print(f"[error] {e}")
+            print(f"[error] {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
