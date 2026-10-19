@@ -43,4 +43,4 @@ def clean_transcript(transcript: Transcript, provider: LLMProvider) -> str:
     #
     # 已确认不做（Q3）：chunking。一次调用。
     text = transcript.to_markdown()
-    return provider.ask(text, system=CLEANUP_SYSTEM_PROMPT, temperature=0.1)
+    return provider.ask(text, system=CLEANUP_SYSTEM_PROMPT)

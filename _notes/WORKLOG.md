@@ -167,3 +167,14 @@
 - pyproject：新增 `[tool.ruff]`（py313、line-length 120、排除 _archive/_scratch/outputs 与 3 个遗留文件；lint select E4/E7/E9/F/I/B/UP/SIM/RET；不开 RUF001–003 因中文全角标点噪音）+ `[tool.ruff.format]`。备份在 _scratch/。
 - 一次性 `ruff format`：14 个文件、约 75 行（空格/尾逗号），语法校验通过、import-linter 4/4 kept。剩 1 条 lint：config.py:96 SIM108（留给 Qian 练三元表达式）。
 - `.vscode/` 在本会话是受保护路径，写不进去 → settings.json / extensions.json / launch.json 放在 `_scratch/vscode/`，待 Qian 复制。settings 内 `python.terminal.useEnvFile: false` 了结 09-06 待决项（选 B：只由 load_dotenv 加载），也使 10-12 的 auth.json loose end 可测。
+
+## 2026-10-18 — B-MVP 首次端到端跑通
+- 4a：模型 `gpt-5.6-luna` 不支持 temperature → Qian 从 cleanup 调用中移除，成功。cleaned.md 质量远好于 raw。（adapter 层的 temperature 兼容仍未做；目前全链路都不传 temperature。）
+- 4b：多轮问答正常；"几个人"回答区分了"被提及"与"发言"，给出依据与范围（4–5 人）。Qian 评价接近真相；漏人可能因名字发音/回声——ASR 局限，属 README Q1 的 diarization 方案 B/C 范畴。
+- 4c：mp4 端到端成功（产出于 coach/sessions/…，已确认被 gitignore 覆盖）。
+- 问题（均为 review 中未做项，非新 bug）：
+  - `--from-json` 参数解析了但没接通 → 程序仍走交互输入路径；回车得 `Path("")` → FileNotFoundError traceback（与空格无关）。
+  - `save_settings` 从未调用 → 无 ~/.coachagent/settings.json。
+  - session 目录名含空格（来自源文件名），命令行需加引号 → 建议对 stem 做 slug。
+  - Q6 check-ignore、外层异常边界仍未做。
+- B-MVP 验收：mp4 → cleaned.md → 带依据回答 ✅；收尾项见上。
