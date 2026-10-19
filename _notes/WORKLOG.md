@@ -178,3 +178,11 @@
   - session 目录名含空格（来自源文件名），命令行需加引号 → 建议对 stem 做 slug。
   - Q6 check-ignore、外层异常边界仍未做。
 - B-MVP 验收：mp4 → cleaned.md → 带依据回答 ✅；收尾项见上。
+
+## 2026-10-18（续）— 最终复查
+- cli.py 已按 review §4 重构：main(argv)->int、互斥组、--from-json 接通、save_settings、slug、_ensure_ignored、外层异常边界、_repl。ruff format/import-linter 4/4 通过。
+- 🔴 潜伏 bug：`import getpass`（模块）后 `prompt=getpass` → 传入模块而非函数；仅在无 key 时触发（TypeError），正是 auth.json 写回分支。pyright 已报（cli.py:79）。修：`from getpass import getpass`。
+- 🟠 `--from-json` 分支未调 `_ensure_ignored`（json 在 repo 内非 ignore 位置时 cleaned.md 会落到可提交路径）→ 挪到 if/else 之后。
+- 🟠 交互输入路径无效时，`_make_session_dir` 先于校验执行 → 留下空/错误名 session 目录 → 先校验 path.is_file()。
+- 🟢 RET504（cli.py:81）、多余 `# noqa: F821`、`import re` 挪顶部、`_build_provider` 补类型注解、清理过时骨架注释。
+- 发现 `_scratch/pyproject.toml.*.bak` 被 git 追踪 → 建议 .gitignore 加 `_scratch/`。
